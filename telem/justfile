@@ -1,0 +1,15 @@
+# build the shm writer (on pi)
+shm-build:
+    cmake -S shm -B shm/build -G Ninja
+    cmake --build shm/build
+
+# run shm writer (on pi)
+shm-run: shm-build
+    ./shm/build/write_shm
+
+# run shm reader (on pi)
+shm-read:
+    python3 shm/read_shm.py
+
+shm-clean:
+    rm -rf shm/build
