@@ -1,0 +1,18 @@
+# recipes default to sh, which windows lacks; use powershell there
+set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
+
+# on windows, point cmake at the prebuilt picotool that setup fetched
+# elsewhere the flake supplies it via CMAKE_PREFIX_PATH
+picotool_flag := if os() == "windows" { '-Dpicotool_DIR="' + replace(module_directory() / ".tools" / "picotool", "\\", "/") + '"' } else { "" }
+
+configure:
+    cmake -S . -B build -G Ninja {{ picotool_flag }}
+
+build-all: configure
+    cmake --build build
+
+build target: configure
+    cmake --build build --target {{ target }}
+
+clean:
+    cmake -E rm -rf build
