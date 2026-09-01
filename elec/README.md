@@ -34,6 +34,8 @@ The Pico SDK is under `pick-sdk/`, so it doesn't need to be separately installed
    brew install cmake ninja just gh picotool arm-none-eabi-gcc
    ```
 
+- Close and open a new terminal, bc PATH may not be updated yet.
+
 ### Nix
 
 Use the provided flake. `nix develop` (or `direnv allow`) sets everything up.
