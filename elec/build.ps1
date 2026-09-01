@@ -26,12 +26,17 @@ if (-not (Test-Path (Join-Path $picotoolDir "picotoolConfig.cmake"))) {
     Write-Host "downloading prebuilt picotool..."
     New-Item -ItemType Directory -Force -Path $tools | Out-Null
     $zip = Join-Path $tools "picotool.zip"
-    Invoke-WebRequest -Uri $ptUrl -OutFile $zip
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Invoke-WebRequest -Uri $ptUrl -OutFile $zip -UseBasicParsing
     Expand-Archive -Path $zip -DestinationPath $tools -Force
     Remove-Item $zip
 }
 
 $picotoolDirFwd = $picotoolDir -replace '\\', '/'
+
+# cmake writes status messages to stderr; under ErrorActionPreference=Stop
+# powershell 5.1 turns those into terminating errors. exit codes are checked below.
+$ErrorActionPreference = "Continue"
 cmake -S $here -B $build -G Ninja "-Dpicotool_DIR=$picotoolDirFwd"
 if ($LASTEXITCODE -ne 0) { throw "configure failed" }
 

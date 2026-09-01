@@ -3,11 +3,11 @@
 # - add ur sources
 # - link libraries u need
 
-target_compile_options(template-project PRIVATE -Wall -Wextra)
 
 add_executable(template-project
     main.cpp
 )
+target_compile_options(template-project PRIVATE -Wall -Wextra)
 
 target_link_libraries(template-project
     pico_stdlib
