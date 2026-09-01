@@ -18,7 +18,7 @@ Need cmake Kitware.CMake
 Need ninja Ninja-build.Ninja
 Need just Casey.Just
 Need gh GitHub.cli
-Need arm-none-eabi-gcc Arm.ArmGnuToolchain
+Need arm-none-eabi-gcc Arm.GnuArmEmbeddedToolchain
 
 # winget writes PATH to the registry, not this session; refresh so fresh installs are usable now
 $env:PATH = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
