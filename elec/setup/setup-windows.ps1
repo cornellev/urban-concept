@@ -1,13 +1,10 @@
-# build rp2040 firmware on windows
-# downloads a prebuilt picotool so the sdk never builds host tools from source
-# usage: ./setup-windows.ps1 [target]   (no target = build all)
-
-param([string]$Target = "", [switch]$Clean)
+# set up the windows toolchain for building rp2040 firmware
+# installs any missing tools via winget and downloads a prebuilt picotool
+# after this, build with: just elec build-all   (or: just elec build <project>)
 
 $ErrorActionPreference = "Stop"
-$here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$build = Join-Path $here "build"
-$tools = Join-Path $here ".tools"
+$elec = Split-Path -Parent $PSScriptRoot
+$tools = Join-Path $elec ".tools"
 $picotoolDir = Join-Path $tools "picotool"
 $ptUrl = "https://github.com/raspberrypi/pico-sdk-tools/releases/download/v2.3.0-1/picotool-2.3.0-x64-win.zip"
 
@@ -21,12 +18,10 @@ Need cmake Kitware.CMake
 Need ninja Ninja-build.Ninja
 Need just Casey.Just
 Need gh GitHub.cli
-Need arm-none-eabi-gcc Arm.GnuArmEmbeddedToolchain
+Need arm-none-eabi-gcc Arm.ArmGnuToolchain
 
 # winget writes PATH to the registry, not this session; refresh so fresh installs are usable now
 $env:PATH = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
-
-if ($Clean -and (Test-Path $build)) { Remove-Item -Recurse -Force $build }
 
 if (-not (Test-Path (Join-Path $picotoolDir "picotoolConfig.cmake"))) {
     Write-Host "downloading prebuilt picotool..."
@@ -38,16 +33,4 @@ if (-not (Test-Path (Join-Path $picotoolDir "picotoolConfig.cmake"))) {
     Remove-Item $zip
 }
 
-$picotoolDirFwd = $picotoolDir -replace '\\', '/'
-
-# cmake writes status messages to stderr; under ErrorActionPreference=Stop
-# powershell 5.1 turns those into terminating errors. exit codes are checked below.
-$ErrorActionPreference = "Continue"
-cmake -S $here -B $build -G Ninja "-Dpicotool_DIR=$picotoolDirFwd"
-if ($LASTEXITCODE -ne 0) { throw "configure failed" }
-
-if ($Target) { cmake --build $build --target $Target }
-else { cmake --build $build }
-if ($LASTEXITCODE -ne 0) { throw "build failed" }
-
-Write-Host "done. uf2 files: build\src\<project>\<project>.uf2"
+Write-Host "setup complete. build with: just elec build-all"
