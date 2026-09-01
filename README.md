@@ -1,5 +1,12 @@
 # urban-concept
 
+clone with:
+
+```sh
+git clone https://github.com/cornellev/urban-concept
+git submodule update --init --recursive
+```
+
 ## Electrical
 
 See [elec/README.md](elec/README.md)
