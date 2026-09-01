@@ -68,3 +68,6 @@ result
 result-*
 .direnv/
 .devenv/
+
+# prebuilt host tools fetched by elec/build.ps1
+.tools/
