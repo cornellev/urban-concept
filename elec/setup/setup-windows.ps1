@@ -1,6 +1,6 @@
 # build rp2040 firmware on windows
 # downloads a prebuilt picotool so the sdk never builds host tools from source
-# usage: ./build.ps1 [target]   (no target = build all)
+# usage: ./setup-windows.ps1 [target]   (no target = build all)
 
 param([string]$Target = "", [switch]$Clean)
 
@@ -18,6 +18,8 @@ function Need($cmd, $hint) {
 }
 Need cmake "winget install Kitware.CMake"
 Need ninja "winget install Ninja-build.Ninja"
+Need just "winget install Casey.Just"
+Need gh "winget install GitHub.CLI"
 Need arm-none-eabi-gcc "install Arm GNU toolchain and add its bin to PATH"
 
 if ($Clean -and (Test-Path $build)) { Remove-Item -Recurse -Force $build }

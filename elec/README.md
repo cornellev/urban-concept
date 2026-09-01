@@ -10,8 +10,20 @@ each subdirectory of `src/` should include a CMakeLists.txt and is an independen
 
 ### Windows
 
-you need to install the picotools, arm gnu toolchain, cmake, ninja, and just. The setup/setup-windows.ps1 file handles this. Run it with:
-`./setup/setup-windows.ps1`
+Run this in the terminal:
+
+```sh
+./setup/setup-windows.ps1
+```
+
+It handles the installation of:
+
+- picotools
+- the arm GNU toolchain
+- CMake
+- Ninja
+- Just
+- the GitHub CLI
 
 ### macOS
 
@@ -19,5 +31,4 @@ todo
 
 ### nix
 
-just use the provided flake. it installs everything for you.
-if you have direnv, `direnv allow` too
+Just use the provided flake.
