@@ -11,16 +11,20 @@ $tools = Join-Path $here ".tools"
 $picotoolDir = Join-Path $tools "picotool"
 $ptUrl = "https://github.com/raspberrypi/pico-sdk-tools/releases/download/v2.3.0-1/picotool-2.3.0-x64-win.zip"
 
-function Need($cmd, $hint) {
+function Need($cmd, $pkg) {
     if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
-        throw "$cmd not on PATH. $hint (then open a NEW terminal)"
+        Write-Warning "$cmd not found, installing $pkg..."
+        winget install --id $pkg -e --accept-source-agreements --accept-package-agreements
     }
 }
-Need cmake "winget install Kitware.CMake"
-Need ninja "winget install Ninja-build.Ninja"
-Need just "winget install Casey.Just"
-Need gh "winget install GitHub.CLI"
-Need arm-none-eabi-gcc "install Arm GNU toolchain and add its bin to PATH"
+Need cmake Kitware.CMake
+Need ninja Ninja-build.Ninja
+Need just Casey.Just
+Need gh GitHub.cli
+Need arm-none-eabi-gcc Arm.GnuArmEmbeddedToolchain
+
+# winget writes PATH to the registry, not this session; refresh so fresh installs are usable now
+$env:PATH = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
 
 if ($Clean -and (Test-Path $build)) { Remove-Item -Recurse -Force $build }
 
