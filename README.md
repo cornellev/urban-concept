@@ -1,9 +1,15 @@
 # urban-concept
 
-clone with:
+Monorepo for Cornell Electric Vehicles' Urban Concept car
+
+## Getting started
+
+Clone with submodules:
 
 ```sh
-git clone https://github.com/cornellev/urban-concept
+git clone --recurse-submodules https://github.com/cornellev/urban-concept.git
+
+# if already cloned without submodules:
 git submodule update --init --recursive
 ```
 

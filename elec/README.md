@@ -2,8 +2,7 @@
 
 This folder holds the firmware for the car's RP2040 boards.
 
-"Firmware" is just the program that runs on a board. Each board has its own
-program in its own folder under `src/` (for example `template-project`).
+Each board has its own program in its own folder under `src/` (for example `template-project`).
 
 The Pico SDK lives in `pico-sdk/` as a git submodule.
 
@@ -21,7 +20,7 @@ The Pico SDK lives in `pico-sdk/` as a git submodule.
   powershell -ExecutionPolicy Bypass -File setup/setup-windows.ps1
   ```
   It installs anything missing (CMake, Ninja, Just, the GitHub CLI, and the arm compiler) and downloads picotool. Windows may pop up permission windows during installs. click yes for all of them.
-- Close and open a new terminal, bc PATH may not be updated yet.
+- Close and open a new terminal, because PATH may not be updated yet.
 
 ### macOS
 
@@ -35,7 +34,7 @@ The Pico SDK lives in `pico-sdk/` as a git submodule.
   ./setup/setup-macos.sh
   ```
   It installs CMake, Ninja, Just, the GitHub CLI, picotool, and the arm compiler.
-- Close and open a new terminal, bc PATH may not be updated yet.
+- Close and open a new terminal, because PATH may not be updated yet.
 
 ### Nix
 
@@ -49,6 +48,7 @@ From the `elec/` folder:
 just build-all                 # build every project
 just build template-project    # build just one project
 just clean                     # delete the build files and start fresh
+just doctor                    # check if tools are installed and working
 ```
 
 (From the repo root instead, add the `elec` prefix, ie `just elec build-all`.)
@@ -71,19 +71,19 @@ First, put the board in BOOTSEL mode:
 - hold the BOOTSEL button
 - plug it back in while still holding the button down
 
-### The simple way (works on every computer)
+### manually flashing
 
 In BOOTSEL mode the board shows up as a USB drive called **`RPI-RP2`**. Just drag the project's `.uf2` file (see the path above) onto that drive. The board flashes itself and restarts
 
-### The one-command way
+### via a command
 
 ```sh
 just flash template-project
 ```
 
 This builds the project and loads it onto the board. On macOS and nix this
-works out of the box. On Windows it needs a USB driver for picotool; if it says
-"no accessible RP2 devices," use the simple drag-and-drop way above instead.
+works out of the box. On Windows it needs a USB driver for picotool. If it says
+"no accessible RP2 devices," use the manual method.
 
 ## Adding a new board
 
