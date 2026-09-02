@@ -25,13 +25,17 @@ The Pico SDK lives in `pico-sdk/` as a git submodule.
 
 ### macOS
 
-1. Install [Homebrew](https://brew.sh) if you don't have it
-2. Install the tools:
-   ```sh
-   brew install cmake ninja just gh picotool
-   brew install --cask gcc-arm-embedded
-   ```
-3. Close and open a new terminal, bc PATH may not be updated yet.
+- Install [Homebrew](https://brew.sh) if you don't have it
+- cd to the `elec/ folder`:
+  ```sh
+  cd /path/to/urban-concept/elec
+  ```
+- Run the setup script from the `elec/` folder:
+  ```sh
+  ./setup/setup-macos.sh
+  ```
+  It installs CMake, Ninja, Just, the GitHub CLI, picotool, and the arm compiler.
+- Close and open a new terminal, bc PATH may not be updated yet.
 
 ### Nix
 
