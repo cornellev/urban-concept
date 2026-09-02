@@ -3,12 +3,9 @@
 This folder holds the firmware for the car's RP2040 boards.
 
 "Firmware" is just the program that runs on a board. Each board has its own
-program in its own folder under `src/` (for example `template-project`). The
-Pico SDK is included here in `pico-sdk/`, so you don't install it separately.
+program in its own folder under `src/` (for example `template-project`).
 
-each board has its own folder under `src/`, ie `template-project`.
-
-The Pico SDK is under `pick-sdk/`, so it doesn't need to be separately installed.
+The Pico SDK lives in `pico-sdk/` as a git submodule.
 
 ## Setup
 
@@ -31,10 +28,10 @@ The Pico SDK is under `pick-sdk/`, so it doesn't need to be separately installed
 1. Install [Homebrew](https://brew.sh) if you don't have it
 2. Install the tools:
    ```sh
-   brew install cmake ninja just gh picotool arm-none-eabi-gcc
+   brew install cmake ninja just gh picotool
+   brew install --cask gcc-arm-embedded
    ```
-
-- Close and open a new terminal, bc PATH may not be updated yet.
+3. Close and open a new terminal, bc PATH may not be updated yet.
 
 ### Nix
 
@@ -57,6 +54,10 @@ The project name is the folder name under `src/`. After a build, the file to fla
 ```
 elec/build/src/<project>/<project>.uf2
 ```
+
+If a build fails right after installing or switching tools (for example it uses
+the wrong compiler), run `just clean` and build again. The old `build/` folder
+caches the previous compiler, so a stale cache can break the next build.
 
 ## Flashing (putting firmware on a board)
 
