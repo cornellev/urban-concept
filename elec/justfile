@@ -8,6 +8,11 @@ picotool_flag := if os() == "windows" { '-Dpicotool_DIR="' + replace(module_dire
 # picotool: bundled binary on windows, on PATH elsewhere
 picotool := if os() == "windows" { '& "' + replace(module_directory() / ".tools" / "picotool" / "picotool.exe", "\\", "/") + '"' } else { "picotool" }
 
+# expected toolchain versions; match the flake (arm-gcc) and the pico-sdk submodule (picotool)
+# update only on a deliberate toolchain bump
+arm_gcc_expected := "15.3"
+picotool_expected := "2.3.0"
+
 configure:
     cmake -S . -B build -G Ninja {{ picotool_flag }}
 
@@ -23,3 +28,7 @@ clean:
 # flash a project onto a pico held in BOOTSEL mode
 flash target: (build target)
     {{ picotool }} load -x build/src/{{ target }}/{{ target }}.uf2
+
+# report installed toolchain versions against the expected pinned ones
+doctor:
+    @cmake -DARM_GCC_EXPECTED="{{ arm_gcc_expected }}" -DPICOTOOL_EXPECTED="{{ picotool_expected }}" -DTOOLS_DIR="{{ replace(module_directory() / ".tools", "\\", "/") }}" -P setup/doctor.cmake
