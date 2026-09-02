@@ -1,0 +1,11 @@
+configure:
+    cmake -S . -B build -G Ninja
+
+build-all: configure
+    cmake --build build
+
+build target: configure
+    cmake --build build --target {{ target }}
+
+clean:
+    rm -rf build
