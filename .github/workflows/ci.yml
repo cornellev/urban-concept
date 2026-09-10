@@ -1,0 +1,25 @@
+name: compile firmware
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  firmware:
+    name: build firmware
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: install nix
+        uses: DeterminateSystems/nix-installer-action@v22
+
+      - name: build all firmware
+        run: nix develop --command just elec build-all
