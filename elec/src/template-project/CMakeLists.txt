@@ -8,8 +8,6 @@ add_executable(template-project
 )
 target_compile_options(template-project PRIVATE -Wall -Wextra)
 
-target_compile_options(template-project PRIVATE -Wall -Wextra)
-
 target_link_libraries(template-project
     pico_stdlib
 )
