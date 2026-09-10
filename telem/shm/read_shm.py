@@ -1,0 +1,194 @@
+import struct
+from multiprocessing import shared_memory, resource_tracker
+
+"""
+Import this file to read from shared memory
+"""
+
+SHM_NAME = "sensor_shm"
+
+SENSOR_FMT = "<" + (
+    "Q" +                              # global ts
+    "I" +                              # errcount
+    "I" + "f" + "f" +                  # power
+    "I" + "f" + "f" +                  # steering
+    "I" + "f" + "f" +                  # rpm_front
+    "I" + "f" + "f" +                  # rpm_back
+    "I" + "f" + "f" + "f" + "f" +      # gps
+    "I" + "f" + "f" +                  # motor
+    "f"                                # filtered
+)
+SENSOR_SIZE = struct.calcsize(SENSOR_FMT)
+
+SEQ_FMT = "<I"
+SEQ_SIZE = struct.calcsize(SEQ_FMT)
+BLOCK_SIZE = SEQ_SIZE + SENSOR_SIZE
+
+def _read_seq(buf) -> int:
+    return struct.unpack_from(SEQ_FMT, buf, 0)[0]
+
+RESET = "\033[0m"
+NAME  = "\033[1;34m"   # bold blue
+VALUE = "\033[1;32m"   # bold green
+TS    = "\033[0;36m"   # cyan
+HEADER = "\033[1;33m"  # yellow
+
+def format_snap(snap):
+    lines = [
+        f"{HEADER}seq:{RESET} {VALUE}{snap['seq']}{RESET}  "
+        f"{HEADER}ts:{RESET} {VALUE}{snap['global_ts']}{RESET} "
+        f"{HEADER}errcount:{RESET} {VALUE}{snap['errcount']}{RESET}"
+    ]
+
+    sensors = {
+        "power":     ["current", "voltage"],
+        "steering":  ["brake_pressure", "turn_angle"],
+        "rpm_front": ["rpm_left", "rpm_right"],
+        "rpm_back":  ["rpm_left", "rpm_right"],
+        "gps":       ["lat", "long", "heading", "speed"],
+        "motor":     ["rpm", "duty_cycle"],
+        "filtered":  ["speed"],
+    }
+
+    for sensor, fields in sensors.items():
+        d = snap[sensor]
+
+        def fmt(field, value):
+            if isinstance(value, float):
+                if field in ("lat", "long"):
+                    return f"{value}"
+                return f"{value:.4f}"
+            return f"{value}"
+
+        vals = "  ".join(
+            f"{NAME}{f}:{RESET} {VALUE}{fmt(f, d[f])}{RESET}"
+            for f in fields
+        )
+
+        ts_part = (
+            f"{TS}ts:{RESET} {VALUE}{d['ts']:<12}{RESET} "
+            if "ts" in d else ""
+        )
+
+        lines.append(
+            f"  {NAME}{sensor:<12}{RESET} {ts_part}{vals}"
+        )
+
+    return "\n".join(lines)
+
+class SensorShmReader:
+    """
+    Attach to an existing POSIX shared memory block written by the SPI process.
+
+    If the SHM block doesn't exist, the instance is created in an "unavailable"
+    state and reads will return None.
+    """
+    def __init__(self, name: str = SHM_NAME):
+        self.available = False
+        self._shm = None
+        self._buf = None
+
+        try:
+            shm = shared_memory.SharedMemory(name=name, create=False)
+            resource_tracker.unregister(shm._name, "shared_memory")
+        except FileNotFoundError:
+            print("SHM not found. Please run C++ writer script.")
+            return
+
+        if shm.size < BLOCK_SIZE:
+            shm.close()
+            raise RuntimeError(f"SHM too small: {shm.size} < {BLOCK_SIZE}")
+
+        self._shm = shm
+        self._buf = shm.buf
+        self.available = True
+
+    def close(self):
+        """Detach from the shared memory block."""
+        if self._shm is not None:
+            self._shm.close()
+            self._shm = None
+            self._buf = None
+            self.available = False
+
+    def read_snapshot(self):
+        """
+        Read a single consistent snapshot using a seq-lock protocol.
+        Returns (seq:int, data:tuple) or None if unavailable.
+        """
+        if not self.available:
+            return None
+
+        buf = self._buf
+        max_retries = 1000
+        for _ in range(max_retries):
+            seq1 = _read_seq(buf)
+            if seq1 & 1:
+                continue
+
+            # unpack directly from the shared memory buffer (no slice/bytes needed)
+            data = struct.unpack_from(SENSOR_FMT, buf, SEQ_SIZE)
+
+            seq2 = _read_seq(buf)
+            if seq1 == seq2 and not (seq2 & 1):
+                return seq2, data
+
+        return None
+
+    def read_snapshot_dict(self):
+        """
+        Read a snapshot and return it as a structured dict, or None if unavailable.
+        """
+        snap = self.read_snapshot()
+        if snap is None:
+            return None
+
+        seq, d = snap
+        return {
+            "seq": seq, "global_ts": d[0], "errcount": d[1],
+            "power": {"ts": d[2],  "current": d[3],  "voltage": d[4]},
+            "steering": {"ts": d[5], "brake_pressure": d[6], "turn_angle": d[7]},
+            "rpm_front": {"ts": d[8], "rpm_left": d[9], "rpm_right": d[10]},
+            "rpm_back": {"ts": d[11], "rpm_left": d[12], "rpm_right": d[13]},
+            "gps": {"ts": d[14], "lat": d[15], "long": d[16], "heading": d[17], "speed": d[18]},
+            "motor": {"ts": d[19], "rpm": d[20], "duty_cycle": d[21]},
+            "filtered": {"speed": d[22]}
+        }
+
+def main():
+    import argparse
+    import time
+
+    parser = argparse.ArgumentParser(description="Read sensor shared memory")
+    parser.add_argument(
+        "mode",
+        choices=["formatted", "unformatted"],
+        nargs="?",
+        help="Output mode"
+    )
+    args = parser.parse_args()
+
+    RATE = 100
+    PERIOD = 1 / RATE
+
+    reader = SensorShmReader()
+    if not reader.available:
+        return 1
+
+    try:
+        while True:
+            snap = reader.read_snapshot_dict()
+            if snap is not None:
+                if args.mode == "formatted":
+                    print(format_snap(snap))
+                elif args.mode == "unformatted":
+                    print(snap)
+                else:
+                    print("Usage: python3 read_shm.py [formatted | unformatted]")
+                    break;
+            time.sleep(PERIOD)
+    finally:
+        reader.close()
+
+if __name__ == "__main__":
+    raise SystemExit(main())

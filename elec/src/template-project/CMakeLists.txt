@@ -3,7 +3,6 @@
 # - add ur sources
 # - link libraries u need
 
-
 add_executable(template-project
     main.cpp
 )
