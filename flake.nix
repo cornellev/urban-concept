@@ -33,6 +33,7 @@
               ninja
               just
               clang-tools
+              gh
             ];
 
             # pico-sdk is vendored at elec/pico-sdk

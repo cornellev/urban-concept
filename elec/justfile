@@ -1,0 +1,34 @@
+# recipes default to sh, which windows lacks; use powershell there
+set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
+
+# on windows, point cmake at the prebuilt picotool that setup fetched
+# elsewhere the flake supplies it via CMAKE_PREFIX_PATH
+picotool_flag := if os() == "windows" { '-Dpicotool_DIR="' + replace(module_directory() / ".tools" / "picotool", "\\", "/") + '"' } else { "" }
+
+# picotool: bundled binary on windows, on PATH elsewhere
+picotool := if os() == "windows" { '& "' + replace(module_directory() / ".tools" / "picotool" / "picotool.exe", "\\", "/") + '"' } else { "picotool" }
+
+# expected toolchain versions; match the flake (arm-gcc) and the pico-sdk submodule (picotool)
+# update only on a deliberate toolchain bump
+arm_gcc_expected := "15.3"
+picotool_expected := "2.3.0"
+
+configure:
+    cmake -S . -B build -G Ninja {{ picotool_flag }}
+
+build-all: configure
+    cmake --build build
+
+build target: configure
+    cmake --build build --target {{ target }}
+
+clean:
+    cmake -E rm -rf build
+
+# flash a project onto a pico held in BOOTSEL mode
+flash target: (build target)
+    {{ picotool }} load -x build/src/{{ target }}/{{ target }}.uf2
+
+# report installed toolchain versions against the expected pinned ones
+doctor:
+    @cmake -DARM_GCC_EXPECTED="{{ arm_gcc_expected }}" -DPICOTOOL_EXPECTED="{{ picotool_expected }}" -DTOOLS_DIR="{{ replace(module_directory() / ".tools", "\\", "/") }}" -P setup/doctor.cmake
