@@ -13,6 +13,8 @@ git clone --recurse-submodules https://github.com/cornellev/urban-concept.git
 git submodule update --init --recursive
 ```
 
+hi
+
 ## Electrical
 
 See [elec/README.md](elec/README.md)
