@@ -1,0 +1,8 @@
+# build and run the chuds host tests
+test:
+    cmake -S tests -B tests/build -G Ninja
+    cmake --build tests/build
+    ctest --test-dir tests/build --output-on-failure
+
+clean:
+    rm -rf tests/build
