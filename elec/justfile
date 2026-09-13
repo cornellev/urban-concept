@@ -1,3 +1,5 @@
+set default-list
+
 # recipes default to sh, which windows lacks; use powershell there
 set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
 
@@ -16,17 +18,17 @@ picotool_expected := "2.3.0"
 configure:
     cmake -S . -B build -G Ninja {{ picotool_flag }}
 
-build-all: configure
+build: configure
     cmake --build build
 
-build target: configure
+build-target target: configure
     cmake --build build --target {{ target }}
 
 clean:
     cmake -E rm -rf build
 
 # flash a project onto a pico held in BOOTSEL mode
-flash target: (build target)
+flash target: (build-target target)
     {{ picotool }} load -x build/src/{{ target }}/{{ target }}.uf2
 
 # report installed toolchain versions against the expected pinned ones

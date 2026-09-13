@@ -4,7 +4,7 @@ This folder holds the firmware for the car's RP2040 boards.
 
 Each board has its own program in its own folder under `src/` (for example `template-project`).
 
-The Pico SDK lives in `pico-sdk/` as a git submodule.
+The Pico SDK is vendored at the repo root in `vendor/pico-sdk/` as a git submodule.
 
 ## Setup
 
@@ -45,13 +45,13 @@ Use the provided flake. `nix develop` (or `direnv allow`) sets everything up.
 From the `elec/` folder:
 
 ```sh
-just build-all                 # build every project
-just build template-project    # build just one project
-just clean                     # delete the build files and start fresh
-just doctor                    # check if tools are installed and working
+just build                        # build every project
+just build-target template-project # build just one project
+just clean                        # delete the build files and start fresh
+just doctor                       # check if tools are installed and working
 ```
 
-(From the repo root instead, add the `elec` prefix, ie `just elec build-all`.)
+(From the repo root instead, add the `elec` prefix, ie `just elec build`.)
 
 The project name is the folder name under `src/`. After a build, the file to flash onto the board is located at:
 
@@ -94,5 +94,6 @@ Each subdirectory of `src/` is an independent project with its own
 - rename the target in its `CMakeLists.txt`
 - add your source files
 - link the libraries you need.
-- compile with `just build {project-name}`
+- register the folder in the firmware inventory in `elec/CMakeLists.txt`
+- compile with `just build-target {project-name}`
 - flash with `just flash {project-name}`

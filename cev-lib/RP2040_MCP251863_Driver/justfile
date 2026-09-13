@@ -1,0 +1,11 @@
+set default-list
+
+# the examples harness supplies the sdk path and inits it
+configure:
+    cmake -S examples -B build -G Ninja
+
+build: configure
+    cmake --build build
+
+clean:
+    cmake -E rm -rf build

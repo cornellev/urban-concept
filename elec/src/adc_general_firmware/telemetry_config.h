@@ -14,5 +14,5 @@ const float CONV_B[] = {0.0f, 0.0f};
 // ADC parameters
 #define ADC_DEADZONE \
     0  // counts near 0 or max that we consider to be exactly 0V or VREF to avoid noise
-#define ADC_VREF 3.3f           // max voltage on ADC input
+#define ADC_VREF       3.3f     // max voltage on ADC input
 #define ADC_COUNTS_MAX 4095.0f  // rp2040 12-bit ADC max count

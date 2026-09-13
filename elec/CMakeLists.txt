@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
 
-set(PICO_SDK_PATH ${CMAKE_CURRENT_LIST_DIR}/pico-sdk)
+set(PICO_SDK_PATH ${CMAKE_CURRENT_LIST_DIR}/../vendor/pico-sdk)
 include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 
 project(urban_concept_elec C CXX ASM)
@@ -16,12 +16,8 @@ pico_sdk_init()
 
 add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../cev-lib/RP2040_MCP251863_Driver rp2040_mcp251863)
 
-# every subdirectory of src/ is a separate firmware project
-
-file(GLOB entries RELATIVE ${CMAKE_CURRENT_LIST_DIR}/src ${CMAKE_CURRENT_LIST_DIR}/src/*)
-
-foreach(entry ${entries})
-    if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/src/${entry}/CMakeLists.txt)
-        add_subdirectory(src/${entry})
-    endif()
-endforeach()
+# firmware inventory; add a board with an explicit line
+add_subdirectory(src/adc_general_firmware)
+add_subdirectory(src/can_firmware)
+add_subdirectory(src/rpm_firmware)
+add_subdirectory(src/template-project)

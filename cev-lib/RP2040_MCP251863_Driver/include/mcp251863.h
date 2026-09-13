@@ -247,24 +247,14 @@ class MCP251863 {
     int readAddr(uint16_t startAddr, uint8_t* dst, size_t len);
     int writeAddr(uint16_t startAddr, const uint8_t* data, size_t len);
 
-    int initGeneralPurposeFifo(
-        uint8_t fifoNum,
-        FifoMode fifoMode,
-        PayloadSize plSize,
-        uint8_t fSize,
-        uint8_t prioNum,
-        TxRetransmitMode retranMode,
-        FifoInterruptFlag* intFlagArray,
-        size_t intFlagSize);
+    int initGeneralPurposeFifo(uint8_t fifoNum, FifoMode fifoMode, PayloadSize plSize,
+                               uint8_t fSize, uint8_t prioNum, TxRetransmitMode retranMode,
+                               FifoInterruptFlag* intFlagArray, size_t intFlagSize);
 
     int initTransmitEventFifo(uint8_t fSize, FifoInterruptFlag* intFlagArray, size_t intFlagSize);
-    int initTransmitQueue(
-        PayloadSize plSize,
-        uint8_t fSize,
-        uint8_t prioNum,
-        TxRetransmitMode retranMode,
-        FifoInterruptFlag* intFlagArray,
-        size_t intFlagSize);
+    int initTransmitQueue(PayloadSize plSize, uint8_t fSize, uint8_t prioNum,
+                          TxRetransmitMode retranMode, FifoInterruptFlag* intFlagArray,
+                          size_t intFlagSize);
 
     int pushTXFIFO(uint8_t fifoNum, const uint8_t* data, size_t pSize);
     int reqSendTXFIFO(uint8_t fifoNum);
@@ -294,17 +284,12 @@ class MCP251863 {
     int initFilter(uint8_t filNum, uint8_t fifoNum, uint16_t canSID);
 
     // send a CAN FD frame through the default TX FIFO
-    int send_canfd(
-        uint32_t id, const uint8_t* data, size_t len, bool brs, bool extended_id = false);
+    int send_canfd(uint32_t id, const uint8_t* data, size_t len, bool brs,
+                   bool extended_id = false);
 
     // send a CAN FD frame through a specific TX FIFO
-    int send_canfd(
-        uint8_t fifoNum,
-        uint32_t id,
-        const uint8_t* data,
-        size_t len,
-        bool brs,
-        bool extended_id = false);
+    int send_canfd(uint8_t fifoNum, uint32_t id, const uint8_t* data, size_t len, bool brs,
+                   bool extended_id = false);
 
     // send a fully populated frame description through the default TX FIFO
     int send_frame(const CanFdFrame& frame);
