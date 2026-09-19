@@ -77,6 +77,14 @@ struct Message {
     if (f.id > kMaxStandardId || f.len < kHeaderLen || f.len > kMaxFdPayload) {
         return std::nullopt;
     }
+    // ids 0x300-0x7FF fall in the reserved class range with no defined MsgClass
+    if (f.id > class_max(MsgClass::Telemetry)) {
+        return std::nullopt;
+    }
+    const std::uint8_t type_byte = f.data[0];
+    if (type_byte > static_cast<std::uint8_t>(MsgType::Dummy)) {
+        return std::nullopt;
+    }
     const std::uint8_t body_len = f.data[1];
     if (body_len > kMaxBody || kHeaderLen + body_len > f.len) {
         return std::nullopt;
@@ -84,7 +92,7 @@ struct Message {
     Message m{};
     m.cls  = id_class(f.id);
     m.sub  = id_sub(f.id);
-    m.type = static_cast<MsgType>(f.data[0]);
+    m.type = static_cast<MsgType>(type_byte);
     std::copy_n(f.data.begin() + kHeaderLen, body_len, m.body.begin());
     m.body_len = body_len;
     return m;
