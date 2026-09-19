@@ -30,11 +30,6 @@ TEST_CASE("priority order: emergency beats command beats telemetry") {
     CHECK(class_min(MsgClass::Command) < class_min(MsgClass::Telemetry));
 }
 
-TEST_CASE("global stop is the lowest id and an emergency") {
-    CHECK(kGlobalStop == 0x000);
-    CHECK(id_class(kGlobalStop) == MsgClass::Emergency);
-}
-
 TEST_CASE("every id stays within the 11-bit standard range") {
     CHECK(make_id(MsgClass::Telemetry, 0xFF) <= 0x7FF);
 }

@@ -22,12 +22,6 @@ constexpr CanId kSubMask   = 0x0FF;
 // largest valid 11-bit standard identifier
 constexpr CanId kMaxStandardId = 0x7FF;
 
-// reserved global stop, the lowest id on the bus, always wins arbitration
-constexpr CanId kGlobalStop = 0x000;
-
-// emergency subaddress 0 is reserved for the global stop; fault reasons start at 1
-constexpr std::uint8_t kStopReason = 0;
-
 [[nodiscard]] constexpr CanId make_id(MsgClass cls, std::uint8_t sub) {
     return static_cast<CanId>((static_cast<CanId>(cls) << kClassShift) | sub);
 }

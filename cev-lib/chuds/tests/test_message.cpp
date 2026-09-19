@@ -1,6 +1,8 @@
 #include <doctest/doctest.h>
 
 #include <array>
+#include <string>
+#include <string_view>
 
 #include "chuds/message.hpp"
 
@@ -99,14 +101,26 @@ TEST_CASE("encode rounds a non-DLC length up to a valid CAN-FD size") {
     CHECK(out->body_len == 9);
 }
 
-TEST_CASE("make_stop is the global stop frame") {
-    const auto f = encode(make_stop());
+TEST_CASE("make_stop is a severity stop carrying sender and a detail string") {
+    const auto stop = make_stop(0, 0x12, "brake fault");
+    REQUIRE(stop.has_value());
+    const auto f = encode(*stop);
     REQUIRE(f.has_value());
-    CHECK(f->id == kGlobalStop);
+    CHECK(f->id == make_id(MsgClass::Emergency, 0));  // severity 0 -> id 0x000
     const auto out = decode(*f);
     REQUIRE(out.has_value());
     CHECK(out->cls == MsgClass::Emergency);
     CHECK(out->type == MsgType::Stop);
+    REQUIRE(out->body_len == 12);  // 1 sender byte + 11 detail chars
+    CHECK(out->body[0] == 0x12);
+    const auto b = out->body_view();
+    const std::string_view detail{reinterpret_cast<const char*>(b.data()) + 1, b.size() - 1};
+    CHECK(detail == "brake fault");
+}
+
+TEST_CASE("make_stop rejects a detail that overflows the body") {
+    const std::string big(kMaxBody, 'x');  // 62 chars + 1 sender byte > kMaxBody
+    CHECK_FALSE(make_stop(0, 0x00, big).has_value());
 }
 
 TEST_CASE("empty body encodes to the two header bytes") {
@@ -117,7 +131,7 @@ TEST_CASE("empty body encodes to the two header bytes") {
     };
     const auto f = encode(m);
     REQUIRE(f.has_value());
-    CHECK(f->id == kGlobalStop);
+    CHECK(f->id == make_id(MsgClass::Emergency, 0));
     CHECK(f->len == 2);
     CHECK(f->data[1] == 0);
 }

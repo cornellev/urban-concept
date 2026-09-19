@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string_view>
 
 #include "chuds/frame.hpp"
 #include "chuds/ids.hpp"
@@ -53,9 +54,20 @@ struct Message {
     return m;
 }
 
-// the one global stop: emergency class, reserved subaddress 0, type Stop
-[[nodiscard]] constexpr Message make_stop() {
-    return Message{.cls = MsgClass::Emergency, .sub = kStopReason, .type = MsgType::Stop};
+// STOP emergency class
+// subaddress = severity (0 is most severe)
+// body contains sender id and detail text
+// detail can be up to kMaxBody - 1 bytes, since the first byte is reserved for the sender id
+[[nodiscard]] constexpr std::optional<Message> make_stop(std::uint8_t severity, std::uint8_t sender,
+                                                         std::string_view detail) {
+    if (detail.size() + 1 > kMaxBody) {
+        return std::nullopt;
+    }
+    Message m{.cls = MsgClass::Emergency, .sub = severity, .type = MsgType::Stop};
+    m.body[0] = sender;
+    std::copy_n(detail.begin(), detail.size(), m.body.begin() + 1);
+    m.body_len = static_cast<std::uint8_t>(detail.size() + 1);
+    return m;
 }
 
 // id = class + subaddress, payload = [type][body_len][body...]
