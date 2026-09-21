@@ -19,11 +19,11 @@ static_assert(sizeof(WheelSpeed) == 2);
 // encode and decode run at compile time (constexpr)
 namespace {
 constexpr Message kSample{
-    .cls      = MsgClass::Command,
-    .subaddress      = 0x40,
-    .type     = MsgType::Update,
-    .body     = {0x01, 0x1E},
-    .body_len = 2,
+    .cls        = MsgClass::Command,
+    .subaddress = 0x40,
+    .type       = MsgType::Update,
+    .body       = {0x01, 0x1E},
+    .body_len   = 2,
 };
 constexpr auto kFrame = encode(kSample);
 static_assert(kFrame.has_value());
@@ -48,11 +48,11 @@ TEST_CASE("encode lays out id, type, length, then body") {
 
 TEST_CASE("decode round-trips encode") {
     const Message m{
-        .cls      = MsgClass::Telemetry,
-        .subaddress      = 0x10,
-        .type     = MsgType::Action,
-        .body     = {0xAB},
-        .body_len = 1,
+        .cls        = MsgClass::Telemetry,
+        .subaddress = 0x10,
+        .type       = MsgType::Action,
+        .body       = {0xAB},
+        .body_len   = 1,
     };
     const auto f = encode(m);
     REQUIRE(f.has_value());
@@ -127,7 +127,7 @@ TEST_CASE("make_stop truncates an over-long detail but still transmits") {
     const std::string big(200, 'x');
     const auto stop = make_stop(3, 0x40, big);
     CHECK(stop.type == MsgType::Stop);
-    CHECK(stop.subaddress == 3);              // severity preserved
+    CHECK(stop.subaddress == 3);       // severity preserved
     CHECK(stop.body_len == kMaxBody);  // 1 sender + (kMaxBody - 1) detail
 
     const auto view = read_stop(stop);
@@ -146,9 +146,9 @@ TEST_CASE("read_stop rejects a message that is not a STOP") {
 
 TEST_CASE("an empty body encodes to the two header bytes") {
     const Message m{
-        .cls  = MsgClass::Command,
-        .subaddress  = 0x40,
-        .type = MsgType::Heartbeat,
+        .cls        = MsgClass::Command,
+        .subaddress = 0x40,
+        .type       = MsgType::Heartbeat,
     };
     const auto f = encode(m);
     REQUIRE(f.has_value());
