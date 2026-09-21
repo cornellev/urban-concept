@@ -106,7 +106,7 @@ class SocketCanTransport {
 
     [[nodiscard]] bool is_open() const { return fd_ >= 0; }
 
-    chuds::TxStatus send(const chuds::CanFrame& f) {
+    [[nodiscard]] chuds::TxStatus send(const chuds::CanFrame& f) {
         if (fd_ < 0) {
             return chuds::TxStatus::Error;
         }
@@ -134,7 +134,7 @@ class SocketCanTransport {
         return chuds::TxStatus::Error;
     }
 
-    chuds::RxResult recv() {
+    [[nodiscard]] chuds::RxResult recv() {
         if (fd_ < 0) {
             return {chuds::RxStatus::Error, {}};
         }

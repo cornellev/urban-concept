@@ -41,7 +41,7 @@ struct RpmCounts {
 };
 
 // edges since the previous call, then reset
-inline RpmCounts rpm_take() {
+[[nodiscard]] inline RpmCounts rpm_take() {
     return {static_cast<std::uint16_t>(g_rpm_left.exchange(0, std::memory_order_relaxed)),
             static_cast<std::uint16_t>(g_rpm_right.exchange(0, std::memory_order_relaxed))};
 }

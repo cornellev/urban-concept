@@ -20,7 +20,7 @@ struct RxMessage {
 // encodes internally so callers never build a CanFrame
 // Error if the message cannot be encoded
 template <Transport T>
-TxStatus send(T& t, const Message& m) {
+[[nodiscard]] TxStatus send(T& t, const Message& m) {
     const auto f = encode(m);
     if (!f) {
         return TxStatus::Error;
@@ -32,7 +32,7 @@ TxStatus send(T& t, const Message& m) {
 // status carries the bus state
 // a frame that arrives but fails to decode is Malformed, not Received
 template <Transport T>
-RxMessage recv(T& t) {
+[[nodiscard]] RxMessage recv(T& t) {
     const auto r = t.recv();
     if (r.status != RxStatus::Received) {
         return {r.status, std::nullopt};

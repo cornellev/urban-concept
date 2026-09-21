@@ -22,7 +22,7 @@ class Mcp251863Transport {
     Mcp251863Transport& operator=(Mcp251863Transport&&)      = delete;
     ~Mcp251863Transport()                                    = default;
 
-    chuds::TxStatus send(const chuds::CanFrame& f) {
+    [[nodiscard]] chuds::TxStatus send(const chuds::CanFrame& f) {
         if (!f.id.is_standard() || !chuds::is_valid_fd_len(f.len)) {
             return chuds::TxStatus::Error;
         }
@@ -46,7 +46,7 @@ class Mcp251863Transport {
         return chuds::TxStatus::Error;
     }
 
-    chuds::RxResult recv() {
+    [[nodiscard]] chuds::RxResult recv() {
         CanFdFrame cf = mcp_.read_canfd();
         if (!cf.valid) {
             // a dead bus is a fault, not a quiet one
