@@ -31,7 +31,7 @@ std::uint16_t read_raw(unsigned gpio) {
     return adc_read();
 }
 
-float raw_to_volts(std::uint16_t raw) { return raw / kAdcCountsMax * kAdcVref; }
+float raw_to_volts(std::uint16_t raw) { return static_cast<float>(raw) / kAdcCountsMax * kAdcVref; }
 
 void publish(cev::Mcp251863Transport& tx, const Telemetry& t) {
     if (auto m =
@@ -72,8 +72,8 @@ int main() {
 
         // integrate over the real elapsed interval, not the nominal period
         const absolute_time_t now = get_absolute_time();
-        const double dt           = absolute_time_diff_us(prev, now) / 1'000'000.0;
-        prev                      = now;
+        const double dt = static_cast<double>(absolute_time_diff_us(prev, now)) / 1'000'000.0;
+        prev            = now;
         joules += static_cast<double>(power) * dt;
 
         if (++n >= samples_per_report) {

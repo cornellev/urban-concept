@@ -40,6 +40,7 @@ class McpBus {
     McpBus& operator=(const McpBus&) = delete;
     McpBus(McpBus&&)                 = delete;
     McpBus& operator=(McpBus&&)      = delete;
+    ~McpBus()                        = default;
 
     Mcp251863Transport& transport() { return tx_; }
 

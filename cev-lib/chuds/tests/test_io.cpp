@@ -53,7 +53,7 @@ TEST_CASE("recv passes an empty bus through as Empty") {
 
 TEST_CASE("recv reports a frame that arrives but does not decode as Malformed") {
     struct BadFrame {
-        TxStatus send(const CanFrame&) { return TxStatus::Queued; }
+        TxStatus send(const CanFrame& /*f*/) { return TxStatus::Queued; }
         RxResult recv() {
             CanFrame f{};
             f.id  = CanId::from_raw(0x300);  // reserved class, decode rejects

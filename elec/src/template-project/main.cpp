@@ -10,10 +10,10 @@ int main() {
 
     // blink and print
     while (true) {
-        gpio_put(PICO_DEFAULT_LED_PIN, 1);
+        gpio_put(PICO_DEFAULT_LED_PIN, true);
         printf("hello from template\n");
         sleep_ms(500);
-        gpio_put(PICO_DEFAULT_LED_PIN, 0);
+        gpio_put(PICO_DEFAULT_LED_PIN, false);
         sleep_ms(500);
     }
 }

@@ -20,6 +20,7 @@ class Mcp251863Transport {
     Mcp251863Transport& operator=(const Mcp251863Transport&) = delete;
     Mcp251863Transport(Mcp251863Transport&&)                 = delete;
     Mcp251863Transport& operator=(Mcp251863Transport&&)      = delete;
+    ~Mcp251863Transport()                                    = default;
 
     chuds::TxStatus send(const chuds::CanFrame& f) {
         if (!f.id.is_standard() || f.len > chuds::kMaxFdPayload) {

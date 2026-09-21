@@ -16,4 +16,13 @@ Checks: >
   -cppcoreguidelines-avoid-c-arrays,
   -*-magic-numbers,
   -readability-braces-around-statements,
-  -modernize-use-designated-initializers
+  -modernize-use-designated-initializers,
+  -portability-avoid-pragma-once,
+  -misc-non-private-member-variables-in-classes,
+  -readability-redundant-member-init,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-pro-type-vararg,
+  -readability-implicit-bool-conversion,
+  -readability-convert-member-functions-to-static,
+  -cppcoreguidelines-avoid-non-const-global-variables

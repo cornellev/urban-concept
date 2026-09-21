@@ -14,7 +14,7 @@
 #include <thread>
 
 #include "chuds/message.hpp"
-#include "chuds/socketcan_transport.hpp"
+#include "chuds/socketcan_transport.hpp"  // IWYU pragma: keep
 
 using namespace chuds;
 

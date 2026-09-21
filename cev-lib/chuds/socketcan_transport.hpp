@@ -1,6 +1,6 @@
 #pragma once
 
-#include "chuds/transport.hpp"
+#include "chuds/transport.hpp"  // IWYU pragma: keep
 
 #ifdef __linux__
 

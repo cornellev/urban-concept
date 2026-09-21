@@ -14,7 +14,7 @@ inline std::atomic<std::uint32_t> g_rpm_right{0};
 inline unsigned g_rpm_left_pin  = 0;
 inline unsigned g_rpm_right_pin = 0;
 
-inline void rpm_on_edge(unsigned gpio, std::uint32_t) {
+inline void rpm_on_edge(unsigned gpio, std::uint32_t /*events*/) {
     if (gpio == g_rpm_left_pin) {
         g_rpm_left.fetch_add(1, std::memory_order_relaxed);
     } else if (gpio == g_rpm_right_pin) {
