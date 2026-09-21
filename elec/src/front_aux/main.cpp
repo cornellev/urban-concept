@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <cstdio>
 #include <initializer_list>
 
 #include "chuds/io.hpp"
@@ -95,6 +96,9 @@ int main() {
     cev::McpBus bus{{kSpiSck, kSpiMosi, kSpiMiso, kMcpCs, kMcpStby}};
     auto& tx = bus.transport();
 
+    // latched so a persistent fault prints once, not every loop
+    bool bus_ok = bus.ok();
+
     Outputs out{};
     // a stop latches until reset; todo clear on a ratified resume command
     bool stopped{};
@@ -103,7 +107,13 @@ int main() {
     absolute_time_t next_pub   = make_timeout_time_ms(kPublishPeriodMs);
 
     while (true) {
-        if (auto rx = chuds::recv(tx); rx.status == chuds::RxStatus::Received && rx.msg) {
+        auto rx = chuds::recv(tx);
+        if (bus_ok &&
+            (rx.status == chuds::RxStatus::BusOff || rx.status == chuds::RxStatus::Overflow)) {
+            std::printf("can rx fault\n");
+            bus_ok = false;
+        }
+        if (rx.status == chuds::RxStatus::Received && rx.msg) {
             const chuds::Message& m = *rx.msg;
             if (m.cls == chuds::MsgClass::Emergency && m.type == chuds::MsgType::Stop) {
                 stopped = true;
@@ -129,7 +139,11 @@ int main() {
             const Telemetry t{rpm.left, rpm.right, adc_read()};
             if (auto m = chuds::make_message(chuds::MsgClass::Telemetry, kNodeId,
                                              chuds::MsgType::Update, t)) {
-                chuds::send(tx, *m);
+                const chuds::TxStatus st = chuds::send(tx, *m);
+                if (bus_ok && (st == chuds::TxStatus::BusOff || st == chuds::TxStatus::Error)) {
+                    std::printf("can tx fault\n");
+                    bus_ok = false;
+                }
             }
         }
     }

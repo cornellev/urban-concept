@@ -30,7 +30,8 @@ class McpBus {
         gpio_set_function(pins.mosi, GPIO_FUNC_SPI);
         gpio_set_function(pins.miso, GPIO_FUNC_SPI);
 
-        if (!mcp_.init()) {
+        ok_ = mcp_.init();
+        if (!ok_) {
             std::printf("mcp251863 init failed\n");
         }
     }
@@ -44,8 +45,12 @@ class McpBus {
 
     Mcp251863Transport& transport() { return tx_; }
 
+    // whether the controller initialized on construction
+    [[nodiscard]] bool ok() const { return ok_; }
+
    private:
     MCP251863 mcp_;
+    bool ok_{};
     Mcp251863Transport tx_{mcp_};
 };
 

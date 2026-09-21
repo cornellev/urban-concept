@@ -33,11 +33,12 @@ std::uint16_t read_raw(unsigned gpio) {
 
 float raw_to_volts(std::uint16_t raw) { return static_cast<float>(raw) / kAdcCountsMax * kAdcVref; }
 
-void publish(cev::Mcp251863Transport& tx, const Telemetry& t) {
+chuds::TxStatus publish(cev::Mcp251863Transport& tx, const Telemetry& t) {
     if (auto m =
             chuds::make_message(chuds::MsgClass::Telemetry, kNodeId, chuds::MsgType::Update, t)) {
-        chuds::send(tx, *m);
+        return chuds::send(tx, *m);
     }
+    return chuds::TxStatus::Error;
 }
 
 }  // namespace
@@ -56,6 +57,9 @@ int main() {
 
     cev::McpBus bus{{kSpiSck, kSpiMosi, kSpiMiso, kMcpCs, kMcpStby}};
     auto& tx = bus.transport();
+
+    // latched so a persistent fault prints once, not every loop
+    bool bus_ok = bus.ok();
 
     constexpr std::uint32_t samples_per_report = kReportPeriodMs / kSamplePeriodMs;
 
@@ -78,7 +82,12 @@ int main() {
 
         if (++n >= samples_per_report) {
             n = 0;
-            publish(tx, {v_bus, amps, power, static_cast<float>(joules)});
+            const chuds::TxStatus st =
+                publish(tx, {v_bus, amps, power, static_cast<float>(joules)});
+            if (bus_ok && (st == chuds::TxStatus::BusOff || st == chuds::TxStatus::Error)) {
+                std::printf("can tx fault\n");
+                bus_ok = false;
+            }
             printf("v=%.2f V  i=%.2f A  p=%.1f W  e=%.1f J\n", v_bus, amps, power, joules);
         }
 
