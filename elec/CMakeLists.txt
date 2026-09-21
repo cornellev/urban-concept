@@ -32,9 +32,6 @@ add_subdirectory(src/common)
 
 # firmware inventory; add a board with an explicit line
 add_subdirectory(src/front_aux)
-add_subdirectory(src/adc_general_firmware)
-add_subdirectory(src/can_firmware)
-add_subdirectory(src/rpm_firmware)
 add_subdirectory(src/back_aux)
 add_subdirectory(src/joulemeter)
 add_subdirectory(src/template-project)
