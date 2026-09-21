@@ -60,8 +60,8 @@ int main() {
     constexpr std::uint32_t samples_per_report = kReportPeriodMs / kSamplePeriodMs;
 
     // energy accumulates over a whole run, so integrate in double to hold resolution
-    double joules        = 0.0;
-    std::uint32_t n      = 0;
+    double joules{};
+    std::uint32_t n{};
     absolute_time_t prev = get_absolute_time();
 
     while (true) {

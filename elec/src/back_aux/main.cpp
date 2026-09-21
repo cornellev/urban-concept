@@ -48,9 +48,9 @@ static_assert(sizeof(AuxCommand) == 2);
 
 // actuator state, driven by bus commands
 struct Outputs {
-    bool turn_left     = false;
-    bool turn_right    = false;
-    std::uint8_t wiper = 0;
+    bool turn_left{};
+    bool turn_right{};
+    std::uint8_t wiper{};
 };
 
 void set_wiper(std::uint8_t level) {
@@ -112,8 +112,8 @@ int main() {
 
     Outputs out{};
     // a stop latches until reset; todo clear on a ratified resume command
-    bool stopped               = false;
-    bool blink_on              = false;
+    bool stopped{};
+    bool blink_on{};
     absolute_time_t next_blink = make_timeout_time_ms(kBlinkHalfPeriodMs);
     absolute_time_t next_pub   = make_timeout_time_ms(kPublishPeriodMs);
 

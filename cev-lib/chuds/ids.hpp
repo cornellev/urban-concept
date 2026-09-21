@@ -58,7 +58,7 @@ class CanId {
     // immediately clear this ctor builds directly from bits
     constexpr explicit CanId(std::uint16_t bits) : raw_(bits) {}
 
-    std::uint16_t raw_ = 0;
+    std::uint16_t raw_{};
 };
 
 // largest valid 11-bit standard identifier

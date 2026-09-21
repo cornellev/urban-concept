@@ -33,7 +33,7 @@ constexpr std::size_t kMaxFdPayload = 64;
 // purposely kept non-chuds specific
 struct CanFrame {
     CanId id{};
-    std::uint8_t len = 0;
+    std::uint8_t len{};
     std::array<std::uint8_t, kMaxFdPayload> data{};
 };
 

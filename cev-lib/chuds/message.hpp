@@ -44,11 +44,11 @@ constexpr std::size_t kMaxBody       = kMaxFdPayload - kHeaderLen;
 
 // a decoded CHUDS message: the id fields (class + subaddress) and the typed body
 struct Message {
-    MsgClass cls            = MsgClass::Telemetry;
-    std::uint8_t subaddress = 0;
-    MsgType type            = MsgType::Dummy;
+    MsgClass cls{MsgClass::Telemetry};
+    std::uint8_t subaddress{};
+    MsgType type{MsgType::Dummy};
     std::array<std::uint8_t, kMaxBody> body{};
-    std::uint8_t body_len = 0;
+    std::uint8_t body_len{};
 
     // a view over the body bytes, without the trailing capacity
     [[nodiscard]] constexpr std::span<const std::uint8_t> body_view() const {
@@ -134,8 +134,8 @@ template <class T>
 
 // a decoded STOP: severity from the subaddress, then [sender][detail...]
 struct StopView {
-    std::uint8_t severity = 0;
-    std::uint8_t sender   = 0;
+    std::uint8_t severity{};
+    std::uint8_t sender{};
     std::span<const std::uint8_t> detail{};
 };
 

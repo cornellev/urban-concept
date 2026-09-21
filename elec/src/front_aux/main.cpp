@@ -43,10 +43,10 @@ static_assert(sizeof(AuxCommand) == 2);
 
 // actuator state, driven by bus commands
 struct Outputs {
-    bool turn_left  = false;
-    bool turn_right = false;
-    bool headlights = false;
-    bool horn       = false;
+    bool turn_left{};
+    bool turn_right{};
+    bool headlights{};
+    bool horn{};
 };
 
 void init_outputs() {
@@ -97,8 +97,8 @@ int main() {
 
     Outputs out{};
     // a stop latches until reset; todo clear on a ratified resume command
-    bool stopped               = false;
-    bool blink_on              = false;
+    bool stopped{};
+    bool blink_on{};
     absolute_time_t next_blink = make_timeout_time_ms(kBlinkHalfPeriodMs);
     absolute_time_t next_pub   = make_timeout_time_ms(kPublishPeriodMs);
 

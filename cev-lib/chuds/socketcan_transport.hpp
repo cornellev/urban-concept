@@ -55,7 +55,7 @@ class SocketCanTransport {
             return false;
         }
 
-        int on = 1;
+        int on{1};
         if (::setsockopt(fd, SOL_CAN_RAW, CAN_RAW_FD_FRAMES, &on, sizeof(on)) < 0) {
             ::close(fd);
             return false;
@@ -185,7 +185,7 @@ class SocketCanTransport {
         }
     }
 
-    int fd_ = -1;
+    int fd_{-1};
 };
 
 static_assert(chuds::Transport<SocketCanTransport>);

@@ -11,8 +11,8 @@ namespace cev {
 // wheel-speed edge counters, shared with the gpio irq
 inline std::atomic<std::uint32_t> g_rpm_left{0};
 inline std::atomic<std::uint32_t> g_rpm_right{0};
-inline unsigned g_rpm_left_pin  = 0;
-inline unsigned g_rpm_right_pin = 0;
+inline unsigned g_rpm_left_pin{};
+inline unsigned g_rpm_right_pin{};
 
 inline void rpm_on_edge(unsigned gpio, std::uint32_t /*events*/) {
     if (gpio == g_rpm_left_pin) {

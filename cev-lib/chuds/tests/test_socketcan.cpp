@@ -44,7 +44,7 @@ int open_raw(bool fd) {
         return -1;
     }
     if (fd) {
-        int on = 1;
+        int on{1};
         ::setsockopt(s, SOL_CAN_RAW, CAN_RAW_FD_FRAMES, &on, sizeof(on));
     }
     ifreq ifr{};

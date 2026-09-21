@@ -37,7 +37,7 @@ enum class RxStatus : std::uint8_t {
 };
 
 struct RxResult {
-    RxStatus status = RxStatus::Empty;
+    RxStatus status{RxStatus::Empty};
     CanFrame frame{};
 };
 

@@ -12,7 +12,7 @@ namespace chuds {
 // mirrors RxResult one level up
 // msg is set only when status is Received
 struct RxMessage {
-    RxStatus status = RxStatus::Empty;
+    RxStatus status{RxStatus::Empty};
     std::optional<Message> msg{};
 };
 
