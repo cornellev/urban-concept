@@ -13,9 +13,9 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <cstddef>
-#include <cstring>
 #include <string_view>
 
 namespace cev {
@@ -72,7 +72,7 @@ class SocketCanTransport {
         // ifr is zero-initialized, so a clamped copy leaves ifr_name terminated
         const std::size_t cap = IFNAMSIZ - 1;
         const std::size_t n   = ifname.size() < cap ? ifname.size() : cap;
-        std::memcpy(ifr.ifr_name, ifname.data(), n);
+        std::copy_n(ifname.data(), n, ifr.ifr_name);
         if (::ioctl(fd, SIOCGIFINDEX, &ifr) < 0) {
             ::close(fd);
             return false;
@@ -122,7 +122,7 @@ class SocketCanTransport {
         // frame contract is always CAN-FD with bit-rate switch
         cf.flags = CANFD_BRS;
         cf.len   = f.len;
-        std::memcpy(cf.data, f.data.data(), f.len);
+        std::copy_n(f.data.data(), f.len, cf.data);
 
         ssize_t n = ::write(fd_, &cf, sizeof(cf));
         if (n == static_cast<ssize_t>(sizeof(cf))) {
@@ -173,7 +173,7 @@ class SocketCanTransport {
         chuds::CanFrame out{};
         out.id  = chuds::CanId::from_raw(static_cast<std::uint16_t>(cf.can_id & CAN_SFF_MASK));
         out.len = cf.len > chuds::kMaxFdPayload ? chuds::kMaxFdPayload : cf.len;
-        std::memcpy(out.data.data(), cf.data, out.len);
+        std::copy_n(cf.data, out.len, out.data.data());
         return {chuds::RxStatus::Received, out};
     }
 

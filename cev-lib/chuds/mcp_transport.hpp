@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstring>
+#include <algorithm>
 
 #include "chuds/transport.hpp"
 #include "mcp251863.h"
@@ -70,7 +70,7 @@ class Mcp251863Transport {
         chuds::CanFrame out{};
         out.id  = chuds::CanId::from_raw(static_cast<std::uint16_t>(cf.id));
         out.len = cf.len > chuds::kMaxFdPayload ? chuds::kMaxFdPayload : cf.len;
-        std::memcpy(out.data.data(), cf.data, out.len);
+        std::copy_n(cf.data, out.len, out.data.data());
 
         return {chuds::RxStatus::Received, out};
     }
