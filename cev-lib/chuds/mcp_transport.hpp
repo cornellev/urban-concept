@@ -49,13 +49,13 @@ class Mcp251863Transport {
     chuds::RxResult recv() {
         CanFdFrame cf = mcp_.read_canfd();
         if (!cf.valid) {
-            if (mcp_.getFIFOStatus(mcp_.getRxFifoNum()).rx_overflow) {
-                return {chuds::RxStatus::Overflow, {}};
-            }
-
             // a dead bus is a fault, not a quiet one
             if (mcp_.getStatus().bus_off) {
                 return {chuds::RxStatus::BusOff, {}};
+            }
+
+            if (mcp_.getFIFOStatus(mcp_.getRxFifoNum()).rx_overflow) {
+                return {chuds::RxStatus::Overflow, {}};
             }
 
             return {chuds::RxStatus::Empty, {}};
