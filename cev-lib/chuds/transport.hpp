@@ -7,20 +7,32 @@
 
 namespace chuds {
 
-// outcome of a send; Queued means accepted into the TX queue, not yet on the wire
+// outcome of a send
 enum class TxStatus : std::uint8_t {
+    // queued, not yet on the wire
     Queued,
-    QueueFull,  // transient, retry later
+    // tx queue full, retry later
+    QueueFull,
+    // controller is bus-off
     BusOff,
+    // send failed, bad frame or driver fault
     Error,
 };
 
-// outcome of a recv; the frame is valid only when status is Received
+// outcome of a recv
+// the frame is valid only when status is Received
 enum class RxStatus : std::uint8_t {
+    // a valid frame arrived
     Received,
-    Empty,  // nothing pending, not an error
+    // nothing pending, not a fault
+    Empty,
+    // rx queue overflowed, frames dropped
     Overflow,
+    // non-chuds frame arrived, keep listening
+    Malformed,
+    // bus is off, a fault not silence
     BusOff,
+    // recv failed, driver fault or closed transport
     Error,
 };
 
@@ -29,8 +41,7 @@ struct RxResult {
     CanFrame frame{};
 };
 
-// the seam between chuds and a driver, as a concept so the binding is
-// compile-time with no vtable
+// the seam between chuds and a driver
 // send and recv report explicit outcomes so a dead bus is not mistaken for quiet
 template <typename T>
 concept Transport = requires(T t, const CanFrame& f) {

@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include <array>
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -8,29 +9,36 @@
 
 using namespace chuds;
 
+namespace {
+struct WheelSpeed {
+    std::uint16_t rpm;
+};
+static_assert(sizeof(WheelSpeed) == 2);
+}  // namespace
+
 // encode and decode run at compile time (constexpr)
 namespace {
 constexpr Message kSample{
     .cls      = MsgClass::Command,
-    .sub      = 0x40,
+    .subaddress      = 0x40,
     .type     = MsgType::Update,
     .body     = {0x01, 0x1E},
     .body_len = 2,
 };
 constexpr auto kFrame = encode(kSample);
 static_assert(kFrame.has_value());
-static_assert(kFrame->id == 0x140);
+static_assert(kFrame->id.raw() == 0x140);
 static_assert(kFrame->len == 4);
 constexpr auto kBack = decode(*kFrame);
 static_assert(kBack.has_value());
-static_assert(kBack->sub == 0x40);
+static_assert(kBack->subaddress == 0x40);
 static_assert(kBack->body_len == 2);
 }  // namespace
 
 TEST_CASE("encode lays out id, type, length, then body") {
     const auto f = encode(kSample);
     REQUIRE(f.has_value());
-    CHECK(f->id == 0x140);
+    CHECK(f->id.raw() == 0x140);
     CHECK(f->len == 4);
     CHECK(f->data[0] == static_cast<std::uint8_t>(MsgType::Update));
     CHECK(f->data[1] == 2);
@@ -41,7 +49,7 @@ TEST_CASE("encode lays out id, type, length, then body") {
 TEST_CASE("decode round-trips encode") {
     const Message m{
         .cls      = MsgClass::Telemetry,
-        .sub      = 0x10,
+        .subaddress      = 0x10,
         .type     = MsgType::Action,
         .body     = {0xAB},
         .body_len = 1,
@@ -51,7 +59,7 @@ TEST_CASE("decode round-trips encode") {
     const auto out = decode(*f);
     REQUIRE(out.has_value());
     CHECK(out->cls == MsgClass::Telemetry);
-    CHECK(out->sub == 0x10);
+    CHECK(out->subaddress == 0x10);
     CHECK(out->type == MsgType::Action);
     REQUIRE(out->body_len == 1);
     CHECK(out->body[0] == 0xAB);
@@ -59,7 +67,7 @@ TEST_CASE("decode round-trips encode") {
 
 TEST_CASE("decode recovers the true body length past CAN-FD padding") {
     CanFrame f{};
-    f.id      = make_id(MsgClass::Telemetry, 0x10);
+    f.id      = CanId(MsgClass::Telemetry, 0x10);
     f.data[0] = static_cast<std::uint8_t>(MsgType::Update);
     f.data[1] = 3;  // true body length
     f.data[2] = 0xAA;
@@ -103,35 +111,48 @@ TEST_CASE("encode rounds a non-DLC length up to a valid CAN-FD size") {
 
 TEST_CASE("make_stop is a severity stop carrying sender and a detail string") {
     const auto stop = make_stop(0, 0x12, "brake fault");
-    REQUIRE(stop.has_value());
-    const auto f = encode(*stop);
+    const auto f    = encode(stop);
     REQUIRE(f.has_value());
-    CHECK(f->id == make_id(MsgClass::Emergency, 0));  // severity 0 -> id 0x000
-    const auto out = decode(*f);
-    REQUIRE(out.has_value());
-    CHECK(out->cls == MsgClass::Emergency);
-    CHECK(out->type == MsgType::Stop);
-    REQUIRE(out->body_len == 12);  // 1 sender byte + 11 detail chars
-    CHECK(out->body[0] == 0x12);
-    const auto b = out->body_view();
-    const std::string_view detail{reinterpret_cast<const char*>(b.data()) + 1, b.size() - 1};
-    CHECK(detail == "brake fault");
+    CHECK(f->id == CanId(MsgClass::Emergency, 0));  // severity 0 -> id 0x000
+
+    const auto view = read_stop(stop);
+    REQUIRE(view.has_value());
+    CHECK(view->severity == 0);
+    CHECK(view->sender == 0x12);
+    REQUIRE(view->detail.size() == 11);
+    CHECK(view->detail[0] == static_cast<std::uint8_t>('b'));
 }
 
-TEST_CASE("make_stop rejects a detail that overflows the body") {
-    const std::string big(kMaxBody, 'x');  // 62 chars + 1 sender byte > kMaxBody
-    CHECK_FALSE(make_stop(0, 0x00, big).has_value());
+TEST_CASE("make_stop truncates an over-long detail but still transmits") {
+    const std::string big(200, 'x');
+    const auto stop = make_stop(3, 0x40, big);
+    CHECK(stop.type == MsgType::Stop);
+    CHECK(stop.subaddress == 3);              // severity preserved
+    CHECK(stop.body_len == kMaxBody);  // 1 sender + (kMaxBody - 1) detail
+
+    const auto view = read_stop(stop);
+    REQUIRE(view.has_value());
+    CHECK(view->sender == 0x40);
+    CHECK(view->detail.size() == kMaxBody - 1);
 }
 
-TEST_CASE("empty body encodes to the two header bytes") {
+TEST_CASE("read_stop rejects a message that is not a STOP") {
+    const std::array<std::uint8_t, 1> body{0x01};
+    const auto m = make_message(MsgClass::Telemetry, 0x10, MsgType::Update,
+                                std::span<const std::uint8_t>(body));
+    REQUIRE(m.has_value());
+    CHECK_FALSE(read_stop(*m).has_value());
+}
+
+TEST_CASE("an empty body encodes to the two header bytes") {
     const Message m{
-        .cls  = MsgClass::Emergency,
-        .sub  = 0x00,
-        .type = MsgType::Stop,
+        .cls  = MsgClass::Command,
+        .subaddress  = 0x40,
+        .type = MsgType::Heartbeat,
     };
     const auto f = encode(m);
     REQUIRE(f.has_value());
-    CHECK(f->id == make_id(MsgClass::Emergency, 0));
+    CHECK(f->id == CanId(MsgClass::Command, 0x40));
     CHECK(f->len == 2);
     CHECK(f->data[1] == 0);
 }
@@ -158,7 +179,7 @@ TEST_CASE("a length byte larger than the frame is rejected") {
 
 TEST_CASE("decode rejects an id outside the 11-bit standard range") {
     CanFrame f{};
-    f.id  = 0x800;  // would otherwise alias to Emergency/STOP via the class mask
+    f.id  = CanId::from_raw(0x800);  // would otherwise alias to Emergency/STOP via the class mask
     f.len = 2;
     CHECK_FALSE(decode(f).has_value());
 }
@@ -174,4 +195,32 @@ TEST_CASE("decode rejects a nonsensical len past the FD payload size") {
     f.data[1] = 4;
     f.len     = 255;
     CHECK_FALSE(decode(f).has_value());
+}
+
+TEST_CASE("a struct body round-trips through make_message and body_as") {
+    const auto m = make_message(MsgClass::Telemetry, 0x10, MsgType::Update, WheelSpeed{1337});
+    REQUIRE(m.has_value());
+    REQUIRE(m->body_len == 2);
+    // 1337 == 0x0539, little-endian on the wire
+    CHECK(m->body[0] == 0x39);
+    CHECK(m->body[1] == 0x05);
+
+    const auto w = body_as<WheelSpeed>(*m);
+    REQUIRE(w.has_value());
+    CHECK(w->rpm == 1337);
+}
+
+TEST_CASE("body_as rejects a size mismatch") {
+    const std::array<std::uint8_t, 1> one{0xAB};
+    const auto m = make_message(MsgClass::Telemetry, 0x10, MsgType::Update,
+                                std::span<const std::uint8_t>(one));
+    REQUIRE(m.has_value());
+    CHECK_FALSE(body_as<WheelSpeed>(*m).has_value());  // body is 1 byte, wants 2
+}
+
+TEST_CASE("struct make_message and body_as are constexpr") {
+    constexpr auto m = make_message(MsgClass::Telemetry, 0x10, MsgType::Update, WheelSpeed{42});
+    static_assert(m.has_value());
+    static_assert(body_as<WheelSpeed>(*m)->rpm == 42);
+    CHECK(true);
 }

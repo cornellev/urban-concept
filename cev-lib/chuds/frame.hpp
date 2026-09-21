@@ -12,7 +12,7 @@ namespace chuds {
 constexpr std::size_t kMaxFdPayload = 64;
 
 // round a byte count (0..64) up to the next valid CAN-FD data length
-[[nodiscard]] constexpr std::uint8_t round_up_dlc(std::uint8_t n) {
+[[nodiscard]] constexpr std::uint8_t round_up_fd_length(std::uint8_t n) {
     if (n <= 8) return n;
     if (n <= 12) return 12;
     if (n <= 16) return 16;
@@ -23,11 +23,16 @@ constexpr std::size_t kMaxFdPayload = 64;
     return 64;
 }
 
-// a raw CAN-FD frame, the unit the transport seam moves
-// len is a physical CAN-FD data length (a valid DLC size), same meaning TX and RX
-// always an FD frame with bit-rate switch and a standard 11-bit id
+// whether len is exactly a valid CAN-FD data length, needing no rounding
+[[nodiscard]] constexpr bool is_valid_fd_len(std::uint8_t len) {
+    return len <= kMaxFdPayload && round_up_fd_length(len) == len;
+}
+
+// a raw CAN-FD frame with 11-bit id and up to 64 bytes of data
+// len is the actual data length, a valid CAN-FD size (see is_valid_fd_len)
+// purposely kept non-chuds specific
 struct CanFrame {
-    CanId id         = 0;
+    CanId id{};
     std::uint8_t len = 0;
     std::array<std::uint8_t, kMaxFdPayload> data{};
 };

@@ -34,12 +34,12 @@ static_assert(!Transport<NotATransport>);
 TEST_CASE("a transport moves a frame through the seam") {
     Loopback t;
     CanFrame f{};
-    f.id  = 0x123;
+    f.id  = CanId::from_raw(0x123);
     f.len = 2;
 
     CHECK(t.send(f) == TxStatus::Queued);
     const auto got = t.recv();
     REQUIRE(got.status == RxStatus::Received);
-    CHECK(got.frame.id == 0x123);
+    CHECK(got.frame.id.raw() == 0x123);
     CHECK(t.recv().status == RxStatus::Empty);  // consumed
 }
