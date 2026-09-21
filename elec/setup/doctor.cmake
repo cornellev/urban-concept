@@ -1,6 +1,11 @@
 # cmake script to check for required build tools and their versions
 # we use cmake because its the only guaranteed cross-platform scripting tool
 
+# pinned versions; match the flake (arm-gcc) and the pico-sdk submodule (picotool)
+# update only on a deliberate toolchain bump
+set(ARM_GCC_EXPECTED "15.3")
+set(PICOTOOL_EXPECTED "2.3.0")
+
 set(problems 0)
 
 macro(report label names verarg expected)
@@ -39,11 +44,11 @@ message("checking build tools:")
 report("arm-gcc " arm-none-eabi-gcc -dumpversion "${ARM_GCC_EXPECTED}")
 report("cmake   " cmake --version "")
 report("ninja   " ninja --version "")
-report("picotool" picotool version "${PICOTOOL_EXPECTED}" "${TOOLS_DIR}/picotool")
+report("picotool" picotool version "${PICOTOOL_EXPECTED}" "${CMAKE_CURRENT_LIST_DIR}/../.tools/picotool")
 message("")
 
 if(problems EQUAL 0)
     message("all build tools present with correct versions")
 else()
-    message("${problems} problem(s) above")
+    message(FATAL_ERROR "${problems} problem(s) above")
 endif()

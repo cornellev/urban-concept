@@ -1,6 +1,6 @@
 # set up the windows toolchain for building rp2040 firmware
 # installs any missing tools via winget and downloads a prebuilt picotool
-# after this, build with: just elec build-all   (or: just elec build <project>)
+# after this, build with: just elec build   (or one target: just elec build-target <project>)
 
 $ErrorActionPreference = "Stop"
 $elec = Split-Path -Parent $PSScriptRoot
@@ -12,12 +12,14 @@ function Need($cmd, $pkg) {
     if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
         Write-Warning "$cmd not found, installing $pkg..."
         winget install --id $pkg -e --accept-source-agreements --accept-package-agreements
+        if ($LASTEXITCODE -ne 0) { throw "winget failed to install $pkg (exit $LASTEXITCODE)" }
     }
 }
 Need cmake Kitware.CMake
 Need ninja Ninja-build.Ninja
 Need just Casey.Just
 Need gh GitHub.cli
+Need jq jqlang.jq
 Need arm-none-eabi-gcc Arm.GnuArmEmbeddedToolchain
 
 # winget writes PATH to the registry, not this session; refresh so fresh installs are usable now
@@ -33,4 +35,4 @@ if (-not (Test-Path (Join-Path $picotoolDir "picotoolConfig.cmake"))) {
     Remove-Item $zip
 }
 
-Write-Host "setup complete. build with: just elec build-all"
+Write-Host "setup complete. build with: just elec build"

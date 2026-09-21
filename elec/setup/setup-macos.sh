@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # set up the macos toolchain for building rp2040 firmware
-# after this, build from elec/ with: just build-all
+# after this, build from elec/ with: just build
 set -euo pipefail
 
 if ! command -v brew >/dev/null; then
@@ -8,8 +8,8 @@ if ! command -v brew >/dev/null; then
     exit 1
 fi
 
-brew install cmake ninja just gh picotool
+brew install cmake ninja just gh jq picotool
 brew install --cask gcc-arm-embedded
 
-echo "setup complete. build from elec/ with: just build-all"
+echo "setup complete. build from elec/ with: just build"
 echo "if the build can't find arm-none-eabi-gcc, open a new terminal and retry."

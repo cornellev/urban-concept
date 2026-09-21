@@ -33,7 +33,7 @@ The Pico SDK is vendored at the repo root in `vendor/pico-sdk/` as a git submodu
   ```sh
   ./setup/setup-macos.sh
   ```
-  It installs CMake, Ninja, Just, the GitHub CLI, picotool, and the arm compiler.
+  It installs CMake, Ninja, Just, jq, the GitHub CLI, picotool, and the arm compiler.
 - Close and open a new terminal, because PATH may not be updated yet.
 
 ### Nix
