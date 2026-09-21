@@ -69,5 +69,5 @@ result-*
 .direnv/
 .devenv/
 
-# prebuilt host tools fetched by elec/build.ps1
+# prebuilt host tools fetched by elec/setup/setup-windows.ps1
 .tools/
