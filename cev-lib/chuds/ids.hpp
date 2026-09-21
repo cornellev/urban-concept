@@ -62,7 +62,7 @@ class CanId {
 };
 
 // largest valid 11-bit standard identifier
-constexpr CanId kMaxStandardId = CanId::from_raw(0x7FF);
+inline constexpr CanId kMaxStandardId = CanId::from_raw(0x7FF);
 
 // the last id of a class range
 [[nodiscard]] constexpr CanId class_max(MsgClass cls) { return {cls, 0xFF}; }

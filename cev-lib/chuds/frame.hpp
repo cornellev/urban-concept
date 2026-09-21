@@ -9,7 +9,7 @@
 namespace chuds {
 
 // the maximum CAN-FD data-field size in bytes
-constexpr std::size_t kMaxFdPayload = 64;
+inline constexpr std::size_t kMaxFdPayload = 64;
 
 // round a byte count (0..64) up to the next valid CAN-FD data length
 [[nodiscard]] constexpr std::uint8_t round_up_fd_length(std::uint8_t n) {

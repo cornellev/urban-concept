@@ -28,10 +28,10 @@ enum class MsgType : std::uint8_t {
 
 // payload is [type][body_len][body...]
 // the explicit length recovers the true body size despite CAN-FD DLC padding
-constexpr std::size_t kTypeOffset    = 0;
-constexpr std::size_t kBodyLenOffset = 1;
-constexpr std::size_t kHeaderLen     = 2;
-constexpr std::size_t kMaxBody       = kMaxFdPayload - kHeaderLen;
+inline constexpr std::size_t kTypeOffset    = 0;
+inline constexpr std::size_t kBodyLenOffset = 1;
+inline constexpr std::size_t kHeaderLen     = 2;
+inline constexpr std::size_t kMaxBody       = kMaxFdPayload - kHeaderLen;
 
 // read the header fields out of a frame's data
 [[nodiscard]] constexpr MsgType frame_type(const CanFrame& f) {
