@@ -23,7 +23,7 @@ class Mcp251863Transport {
     ~Mcp251863Transport()                                    = default;
 
     chuds::TxStatus send(const chuds::CanFrame& f) {
-        if (!f.id.is_standard() || f.len > chuds::kMaxFdPayload) {
+        if (!f.id.is_standard() || !chuds::is_valid_fd_len(f.len)) {
             return chuds::TxStatus::Error;
         }
 

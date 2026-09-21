@@ -113,7 +113,7 @@ class SocketCanTransport {
 
         // reject a malformed frame before it corrupts memory or aliases an id
         // an out-of-range id would mask down to a valid one on the wire
-        if (!f.id.is_standard() || f.len > chuds::kMaxFdPayload) {
+        if (!f.id.is_standard() || !chuds::is_valid_fd_len(f.len)) {
             return chuds::TxStatus::Error;
         }
 
