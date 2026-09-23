@@ -4,13 +4,13 @@
 # pinned versions; match the flake (arm-gcc) and the pico-sdk submodule (picotool)
 # update only on a deliberate toolchain bump
 set(ARM_GCC_EXPECTED "15.3")
-set(PICOTOOL_EXPECTED "2.3.0")
+set(PICOTOOL_EXPECTED "2.3")
 
 set(problems 0)
 
 macro(report label names verarg expected)
     unset(exe CACHE)
-    # extra args are find hints (bundled windows picotool)
+    # extra args are find hints (bundled windows tools)
     find_program(exe NAMES ${names} HINTS ${ARGN})
     if(NOT exe)
         message("  MISSING   ${label}  not installed")
@@ -41,7 +41,7 @@ macro(report label names verarg expected)
 endmacro()
 
 message("checking build tools:")
-report("arm-gcc " arm-none-eabi-gcc -dumpversion "${ARM_GCC_EXPECTED}")
+report("arm-gcc " arm-none-eabi-gcc -dumpversion "${ARM_GCC_EXPECTED}" "$ENV{PICO_TOOLCHAIN_PATH}/bin")
 report("cmake   " cmake --version "")
 report("ninja   " ninja --version "")
 report("picotool" picotool version "${PICOTOOL_EXPECTED}" "${CMAKE_CURRENT_LIST_DIR}/../.tools/picotool")

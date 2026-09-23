@@ -13,7 +13,7 @@ Checks: >
   -readability-uppercase-literal-suffix,
   -readability-identifier-length,
   -modernize-use-trailing-return-type,
-  -cppcoreguidelines-avoid-c-arrays,
+  -*-avoid-c-arrays,
   -*-magic-numbers,
   -readability-braces-around-statements,
   -modernize-use-designated-initializers,
@@ -26,3 +26,5 @@ Checks: >
   -readability-implicit-bool-conversion,
   -readability-convert-member-functions-to-static,
   -cppcoreguidelines-avoid-non-const-global-variables
+CheckOptions:
+  misc-include-cleaner.IgnoreHeaders: 'pico/.*;hardware/.*'

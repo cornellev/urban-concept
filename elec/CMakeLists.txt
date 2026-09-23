@@ -13,14 +13,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # help find_package(picotool) across install locations
-# the flake's CMAKE_PREFIX_PATH is honored on top of these
+# the cmake variable is searched before the env var, so probe brew only when no shell set the env
 if(WIN32)
     list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_LIST_DIR}/.tools/picotool")
 endif()
-execute_process(COMMAND brew --prefix
-    OUTPUT_VARIABLE BREW_PREFIX OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-if(BREW_PREFIX)
-    list(APPEND CMAKE_PREFIX_PATH "${BREW_PREFIX}")
+if(NOT DEFINED ENV{CMAKE_PREFIX_PATH})
+    execute_process(COMMAND brew --prefix
+        OUTPUT_VARIABLE BREW_PREFIX OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    if(BREW_PREFIX)
+        list(APPEND CMAKE_PREFIX_PATH "${BREW_PREFIX}")
+    endif()
 endif()
 
 pico_sdk_init()

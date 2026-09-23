@@ -8,7 +8,7 @@ if ! command -v brew >/dev/null; then
     exit 1
 fi
 
-brew install cmake ninja just gh jq picotool
+brew install cmake ninja just gh picotool
 brew install --cask gcc-arm-embedded
 
 echo "setup complete. build from elec/ with: just build"

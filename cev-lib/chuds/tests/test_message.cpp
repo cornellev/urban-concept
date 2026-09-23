@@ -2,7 +2,6 @@
 
 #include <array>
 #include <cstdint>
-#include <string>
 #include <string_view>
 
 #include "chuds/message.hpp"
@@ -12,6 +11,7 @@ using namespace chuds;
 namespace {
 struct WheelSpeed {
     std::uint16_t rpm;
+    static constexpr bool chuds_wire_body = true;
 };
 static_assert(sizeof(WheelSpeed) == 2);
 }  // namespace
@@ -124,8 +124,9 @@ TEST_CASE("make_stop is a severity stop carrying sender and a detail string") {
 }
 
 TEST_CASE("make_stop truncates an over-long detail but still transmits") {
-    const std::string big(200, 'x');
-    const auto stop = make_stop(3, 0x40, big);
+    std::array<char, 200> big{};
+    big.fill('x');
+    const auto stop = make_stop(3, 0x40, std::string_view(big.data(), big.size()));
     CHECK(stop.type == MsgType::Stop);
     CHECK(stop.subaddress == 3);       // severity preserved
     CHECK(stop.body_len == kMaxBody);  // 1 sender + (kMaxBody - 1) detail
@@ -134,6 +135,21 @@ TEST_CASE("make_stop truncates an over-long detail but still transmits") {
     REQUIRE(view.has_value());
     CHECK(view->sender == 0x40);
     CHECK(view->detail.size() == kMaxBody - 1);
+}
+
+TEST_CASE("make_stop with an empty detail carries only the sender") {
+    const auto stop = make_stop(1, 0x12, "");
+    CHECK(stop.body_len == 1);
+
+    const auto view = read_stop(stop);
+    REQUIRE(view.has_value());
+    CHECK(view->sender == 0x12);
+    CHECK(view->detail.empty());
+}
+
+TEST_CASE("read_stop rejects a STOP with no sender byte") {
+    const Message m{.cls = MsgClass::Emergency, .type = MsgType::Stop};
+    CHECK_FALSE(read_stop(m).has_value());
 }
 
 TEST_CASE("read_stop rejects a message that is not a STOP") {
@@ -165,6 +181,12 @@ TEST_CASE("an over-long body is rejected on build and encode") {
     CHECK_FALSE(encode(m).has_value());
 }
 
+TEST_CASE("make_message rejects an invalid class or type") {
+    const std::array<std::uint8_t, 1> body{0x01};
+    CHECK_FALSE(make_message(static_cast<MsgClass>(3), 0, MsgType::Update, body).has_value());
+    CHECK_FALSE(make_message(MsgClass::Telemetry, 0, static_cast<MsgType>(5), body).has_value());
+}
+
 TEST_CASE("a frame shorter than the header is malformed") {
     CanFrame f{.len = 1};
     CHECK_FALSE(decode(f).has_value());
@@ -181,6 +203,28 @@ TEST_CASE("decode rejects an id outside the 11-bit standard range") {
     CanFrame f{};
     f.id  = CanId::from_raw(0x800);  // would otherwise alias to Emergency/STOP via the class mask
     f.len = 2;
+    CHECK_FALSE(decode(f).has_value());
+}
+
+TEST_CASE("decode rejects a reserved class") {
+    CanFrame f{};
+    f.id  = CanId::from_raw(0x300);
+    f.len = 2;
+    CHECK_FALSE(decode(f).has_value());
+}
+
+TEST_CASE("decode rejects an unknown type byte") {
+    CanFrame f{};
+    f.data[0] = 5;
+    f.len     = 2;
+    CHECK_FALSE(decode(f).has_value());
+}
+
+TEST_CASE("decode rejects a len that is not a CAN-FD size") {
+    CanFrame f{};
+    f.len = 9;
+    CHECK_FALSE(decode(f).has_value());
+    f.len = 13;
     CHECK_FALSE(decode(f).has_value());
 }
 
