@@ -1,19 +1,34 @@
-#include <cstdio>
+#include <cstdint>
 
+#include "common/interval.hpp"
+#include "common/mcp_bus.hpp"
+#include "config.hpp"
 #include "pico/stdlib.h"
 
+constexpr std::uint32_t kBlinkHalfPeriodMs = 500;
+
+// template node: blinks the LED and drains the bus
 int main() {
     stdio_init_all();
 
-    gpio_init(PICO_DEFAULT_LED_PIN);
-    gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
+    gpio_init(kStatusLed);
+    gpio_set_dir(kStatusLed, GPIO_OUT);
 
-    // blink and print
+    cev::McpBus bus{
+        {.sck = kSpiSck, .mosi = kSpiMosi, .miso = kSpiMiso, .cs = kMcpCs, .stby = kMcpStby}};
+
+    bool led_on{};
+    cev::Interval blink{kBlinkHalfPeriodMs};
+
     while (true) {
-        gpio_put(PICO_DEFAULT_LED_PIN, true);
-        printf("hello from template\n");
-        sleep_ms(500);
-        gpio_put(PICO_DEFAULT_LED_PIN, false);
-        sleep_ms(500);
+        auto rx = bus.recv();
+        if (rx.status == chuds::RxStatus::Received && rx.msg) {
+            // handle messages addressed to this node here
+        }
+
+        if (blink.due()) {
+            led_on = !led_on;
+            gpio_put(kStatusLed, led_on);
+        }
     }
 }

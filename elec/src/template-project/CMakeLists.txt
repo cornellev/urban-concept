@@ -1,19 +1,15 @@
-# to add a board:
-# - copy this folder and rename the target
-# - add ur sources
-# - link libraries u need
-
 add_executable(template-project
     main.cpp
 )
+
 target_compile_options(template-project PRIVATE -Wall -Wextra)
 
+# board_common (src/common) is the shared board base: pico_stdlib, spi, gpio, and the chuds mcp bus
 target_link_libraries(template-project
-    pico_stdlib
+    board_common
 )
 
 pico_enable_stdio_uart(template-project 0)
 pico_enable_stdio_usb(template-project 1)
 
-# produce the .uf2 to flash onto the board
 pico_add_extra_outputs(template-project)
