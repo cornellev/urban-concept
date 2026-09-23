@@ -15,13 +15,13 @@
 
 #include <algorithm>
 #include <cerrno>
-#include <cstddef>
 #include <string_view>
 
 namespace cev {
 
 // a chuds::Transport over a Linux SocketCAN raw CAN-FD socket
 // non-blocking: recv reports Empty on a quiet bus, BusOff on a dead one
+// bus-off holds from the bus-off error frame until a restart or any received frame
 class SocketCanTransport {
    public:
     SocketCanTransport() = default;
@@ -31,12 +31,16 @@ class SocketCanTransport {
     SocketCanTransport(const SocketCanTransport&)            = delete;
     SocketCanTransport& operator=(const SocketCanTransport&) = delete;
 
-    SocketCanTransport(SocketCanTransport&& other) noexcept : fd_(other.fd_) { other.fd_ = -1; }
+    SocketCanTransport(SocketCanTransport&& other) noexcept
+        : fd_(other.fd_), bus_off_(other.bus_off_) {
+        other.fd_ = -1;
+    }
 
     SocketCanTransport& operator=(SocketCanTransport&& other) noexcept {
         if (this != &other) {
             close_fd();
             fd_       = other.fd_;
+            bus_off_  = other.bus_off_;
             other.fd_ = -1;
         }
         return *this;
@@ -50,6 +54,11 @@ class SocketCanTransport {
     [[nodiscard]] bool open(std::string_view ifname) {
         close_fd();
 
+        // ifr_name needs room for its terminator
+        if (ifname.size() >= IFNAMSIZ) {
+            return false;
+        }
+
         int fd = ::socket(PF_CAN, SOCK_RAW | SOCK_CLOEXEC, CAN_RAW);
         if (fd < 0) {
             return false;
@@ -61,18 +70,16 @@ class SocketCanTransport {
             return false;
         }
 
-        // deliver bus-off as an error frame so recv reports it instead of silence
-        can_err_mask_t err_mask = CAN_ERR_BUSOFF;
+        // deliver bus-off and restart as error frames so recv tracks the bus state
+        can_err_mask_t err_mask = CAN_ERR_BUSOFF | CAN_ERR_RESTARTED;
         if (::setsockopt(fd, SOL_CAN_RAW, CAN_RAW_ERR_FILTER, &err_mask, sizeof(err_mask)) < 0) {
             ::close(fd);
             return false;
         }
 
         ifreq ifr{};
-        // ifr is zero-initialized, so a clamped copy leaves ifr_name terminated
-        const std::size_t cap = IFNAMSIZ - 1;
-        const std::size_t n   = ifname.size() < cap ? ifname.size() : cap;
-        std::copy_n(ifname.data(), n, ifr.ifr_name);
+        // ifr is zero-initialized, so ifr_name stays terminated
+        std::copy_n(ifname.data(), ifname.size(), ifr.ifr_name);
         if (::ioctl(fd, SIOCGIFINDEX, &ifr) < 0) {
             ::close(fd);
             return false;
@@ -100,7 +107,8 @@ class SocketCanTransport {
             return false;
         }
 
-        fd_ = fd;
+        fd_      = fd;
+        bus_off_ = false;
         return true;
     }
 
@@ -115,6 +123,10 @@ class SocketCanTransport {
         // an out-of-range id would mask down to a valid one on the wire
         if (!f.id.is_standard() || !chuds::is_valid_fd_len(f.len)) {
             return chuds::TxStatus::Error;
+        }
+
+        if (bus_off_) {
+            return chuds::TxStatus::BusOff;
         }
 
         canfd_frame cf{};
@@ -143,16 +155,20 @@ class SocketCanTransport {
         ssize_t n = ::read(fd_, &cf, sizeof(cf));
         if (n < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                return {chuds::RxStatus::Empty, {}};
+                return {bus_off_ ? chuds::RxStatus::BusOff : chuds::RxStatus::Empty, {}};
             }
             return {chuds::RxStatus::Error, {}};
         }
 
         // an error frame reports bus state, not data
-        // we registered only bus-off
+        // we registered only bus-off and restart
         if ((cf.can_id & CAN_ERR_FLAG) != 0) {
-            return {chuds::RxStatus::BusOff, {}};
+            bus_off_ = (cf.can_id & CAN_ERR_BUSOFF) != 0;
+            return {bus_off_ ? chuds::RxStatus::BusOff : chuds::RxStatus::Empty, {}};
         }
+
+        // a bus-off controller receives nothing, so any frame means the bus is back
+        bus_off_ = false;
 
         // a 16-byte read is a classic CAN frame
         // chuds is CAN-FD only, so reject it
@@ -186,6 +202,7 @@ class SocketCanTransport {
     }
 
     int fd_{-1};
+    bool bus_off_{false};
 };
 
 static_assert(chuds::Transport<SocketCanTransport>);

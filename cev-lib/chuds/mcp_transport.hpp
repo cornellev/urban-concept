@@ -32,18 +32,13 @@ class Mcp251863Transport {
             return chuds::TxStatus::Queued;
         }
 
-        // a bus-off keeps the tx queue full, so rule it out before reading fullness
+        // a bus-off keeps the tx queue full, so rule it out first
         if (mcp_.getStatus().bus_off) {
             return chuds::TxStatus::BusOff;
         }
 
-        // not_full_or_not_empty is the tx not-full flag
-        // clear means the queue is full
-        if (!mcp_.getFIFOStatus(mcp_.getTxFifoNum()).not_full_or_not_empty) {
-            return chuds::TxStatus::QueueFull;
-        }
-
-        return chuds::TxStatus::Error;
+        // the frame was prevalidated, so the only failure left is a full tx fifo
+        return chuds::TxStatus::QueueFull;
     }
 
     [[nodiscard]] chuds::RxResult recv() {

@@ -27,6 +27,7 @@ inline constexpr std::size_t kMaxFdPayload = 64;
 [[nodiscard]] constexpr bool is_valid_fd_len(std::uint8_t len) {
     return len <= kMaxFdPayload && round_up_fd_length(len) == len;
 }
+static_assert(is_valid_fd_len(kMaxFdPayload));
 
 // a raw CAN-FD frame with 11-bit id and up to 64 bytes of data
 // len is the actual data length, a valid CAN-FD size (see is_valid_fd_len)

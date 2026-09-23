@@ -15,6 +15,7 @@ namespace {
 // a telemetry body: wheel speed in rpm
 struct WheelSpeed {
     std::uint16_t rpm;
+    static constexpr bool chuds_wire_body = true;
 };
 static_assert(sizeof(WheelSpeed) == 2);
 
@@ -28,7 +29,7 @@ int run_send(cev::SocketCanTransport& t) {
         std::fprintf(stderr, "error\n");
         return 1;
     }
-    const auto st = send(t, *msg);
+    const auto st = chuds::send(t, *msg);
     std::printf("sent wheel speed %u. status: %d\n", static_cast<unsigned>(fake_rpm),
                 static_cast<int>(st));
     return st == TxStatus::Queued ? 0 : 1;
@@ -37,9 +38,13 @@ int run_send(cev::SocketCanTransport& t) {
 int run_recv(cev::SocketCanTransport& t, std::string_view ifname) {
     std::printf("listening on %.*s\n", static_cast<int>(ifname.size()), ifname.data());
     for (int i = 0; i < 500; ++i) {
-        const auto r = recv(t);
+        const auto r = chuds::recv(t);
         if (r.status == RxStatus::BusOff) {
             std::fprintf(stderr, "bus off\n");
+            return 1;
+        }
+        if (r.status == RxStatus::Error) {
+            std::fprintf(stderr, "recv error\n");
             return 1;
         }
         if (r.msg) {

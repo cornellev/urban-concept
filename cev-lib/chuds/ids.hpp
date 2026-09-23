@@ -21,15 +21,16 @@ class CanId {
     static constexpr std::uint16_t kClassMask      = 0x0700;
     static constexpr std::uint16_t kSubaddressMask = 0x00FF;
     static constexpr std::uint16_t kStandardMax    = 0x07FF;
+    static_assert((kClassMask | kSubaddressMask) == kStandardMax);
 
    public:
     CanId() = default;
 
     // pack a class and subaddress into an id
     constexpr CanId(MsgClass cls, std::uint8_t subaddress) {
-        const std::uint16_t class_bits = static_cast<std::uint16_t>(cls) << kClassShift;
+        const int class_bits = static_cast<int>(cls) << kClassShift;
 
-        raw_ = class_bits | subaddress;
+        raw_ = static_cast<std::uint16_t>(class_bits | subaddress);
     }
 
     // wrap a raw 11-bit value taken off the wire, for the driver seam only

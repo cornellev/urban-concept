@@ -5,6 +5,7 @@
 #include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -32,6 +33,7 @@ inline constexpr std::size_t kTypeOffset    = 0;
 inline constexpr std::size_t kBodyLenOffset = 1;
 inline constexpr std::size_t kHeaderLen     = 2;
 inline constexpr std::size_t kMaxBody       = kMaxFdPayload - kHeaderLen;
+static_assert(kHeaderLen + kMaxBody == kMaxFdPayload);
 
 // read the header fields out of a frame's data
 [[nodiscard]] constexpr MsgType frame_type(const CanFrame& f) {
@@ -74,10 +76,15 @@ struct Message {
 
 // chuds struct bodies are the little-endian wire bytes. the host must match
 static_assert(std::endian::native == std::endian::little);
+static_assert(std::numeric_limits<float>::is_iec559);
 
-// checks the requirements a struct body must meet to bit_cast onto the wire
+// requirements to bit_cast a struct body onto the wire
 template <class T>
 constexpr void check_wire_body() {
+    static_assert(
+        requires { requires T::chuds_wire_body; },
+        "wire body must opt in with `static constexpr bool chuds_wire_body = true;` "
+        "after confirming it has no padding and no pointer members");
     static_assert(std::is_trivially_copyable_v<T>, "body must be trivially copyable");
     static_assert(std::is_standard_layout_v<T>, "body must be standard-layout");
     static_assert(sizeof(T) <= kMaxBody, "body is larger than the CAN-FD payload");
@@ -119,6 +126,7 @@ template <class T>
 // body contains [sender][detail...]
 // overly long detail is truncated to prevent failures
 // building a stop message should never fail, so we have a dedicated function for it
+// only the pi sends STOP, since each CAN id must have exactly one transmitter
 [[nodiscard]] constexpr Message make_stop(std::uint8_t severity, std::uint8_t sender,
                                           std::string_view detail) {
     constexpr std::size_t kMaxDetail = kMaxBody - 1;
@@ -192,7 +200,7 @@ struct StopView {
     const std::uint8_t body_len = frame_body_len(f);
 
     // the claimed body must fit within the frame
-    if (body_len > kMaxBody || kHeaderLen + body_len > f.len) {
+    if (kHeaderLen + body_len > f.len) {
         return std::nullopt;
     }
 
