@@ -11,6 +11,13 @@ namespace chuds {
 // the maximum CAN-FD data-field size in bytes
 inline constexpr std::size_t kMaxFdPayload = 64;
 
+// every node must run the bus at these bitrates and sample points
+// sample points are percent of the bit time
+inline constexpr std::uint32_t kNominalBitrate     = 500'000;
+inline constexpr std::uint32_t kDataBitrate        = 2'000'000;
+inline constexpr std::uint32_t kNominalSamplePoint = 80;
+inline constexpr std::uint32_t kDataSamplePoint    = 80;
+
 // round a byte count (0..64) up to the next valid CAN-FD data length
 [[nodiscard]] constexpr std::uint8_t round_up_fd_length(std::uint8_t n) {
     if (n <= 8) return n;

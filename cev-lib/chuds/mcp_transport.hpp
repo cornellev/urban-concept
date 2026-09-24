@@ -1,11 +1,25 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdint>
 
 #include "chuds/transport.hpp"
 #include "mcp251863.h"
 
 namespace cev {
+
+// whether a driver timing preset runs at this bitrate and sample point on the 40 MHz clock
+constexpr bool timing_matches(const BitTiming& t, std::uint32_t bitrate,
+                              std::uint32_t sample_point) {
+    const std::uint32_t tq_per_bit = std::uint32_t{t.tseg1} + t.tseg2 + 3;
+    return MCP251863_CLOCK_HZ == bitrate * (std::uint32_t{t.brp} + 1) * tq_per_bit &&
+           100 * (std::uint32_t{t.tseg1} + 2) == sample_point * tq_per_bit;
+}
+
+// McpBus applies these presets through init(), so they must match the chuds bus
+static_assert(timing_matches(kBitTiming500K40MHz, chuds::kNominalBitrate,
+                             chuds::kNominalSamplePoint));
+static_assert(timing_matches(kBitTiming2M40MHz, chuds::kDataBitrate, chuds::kDataSamplePoint));
 
 // a chuds::Transport over the MCP251863 CAN-FD controller
 class Mcp251863Transport {
@@ -50,6 +64,8 @@ class Mcp251863Transport {
             }
 
             if (mcp_.getFIFOStatus(mcp_.getRxFifoNum()).rx_overflow) {
+                // the flag is sticky and holds nINT low, so clear it once reported
+                mcp_.clearRxOverflow();
                 return {chuds::RxStatus::Overflow, {}};
             }
 

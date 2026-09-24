@@ -466,10 +466,7 @@ int MCP251863::init(const InitConfig& config) {
     writeAddr(to_underlying(RegisterAddress::REG_MCP_C1RXOVIF), (uint8_t*)&reg, 4);
     writeAddr(to_underlying(RegisterAddress::REG_MCP_C1TXATIF), (uint8_t*)&reg, 4);
 
-    InterruptEnable interrupts[] = {
-        INT_EN_MCP_RXIE,   INT_EN_MCP_TXIE,   INT_EN_MCP_RXOVIE,
-        INT_EN_MCP_TXATIE, INT_EN_MCP_CERRIE, INT_EN_MCP_SERRIE,
-    };
+    InterruptEnable interrupts[] = {INT_EN_MCP_RXIE, INT_EN_MCP_RXOVIE};
     if (!setInterrupts(interrupts, sizeof(interrupts) / sizeof(interrupts[0]))) {
         return 0;
     }
@@ -778,6 +775,13 @@ CanFdFrame MCP251863::read_frame(uint8_t fifoNum) {
 
     frame.valid = 1;
     return frame;
+}
+
+int MCP251863::clearRxOverflow() {
+    // writing zero clears RXOVIF, the read-only flags in this byte ignore the write
+    uint8_t zero = 0;
+    writeAddr(to_underlying(RegisterAddress::REG_MCP_C1FIFOSTAx) + 12 * (rxFifoNum_ - 1), &zero, 1);
+    return 1;
 }
 
 FifoStatus MCP251863::getFIFOStatus(uint8_t fifoNum) {

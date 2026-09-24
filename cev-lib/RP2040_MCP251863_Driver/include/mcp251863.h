@@ -10,7 +10,8 @@
 #include "pico/stdlib.h"
 
 // Constants and magic numbers
-const uint MCP251863_BAUD_RATE = 160000000;
+// mcp251863 spi interface tops out at 20 mhz
+const uint MCP251863_BAUD_RATE = 20000000;
 
 // Enums for various device modes/configs
 
@@ -225,12 +226,15 @@ struct FifoStatus {
     bool not_full_or_not_empty;
 };
 
+// the boards clock the controller from a 40 mhz crystal, which the presets below assume
+const uint MCP251863_CLOCK_HZ = 40000000;
+
 // Bit timing presets for a 40 MHz CAN clock.
 // Bit time = (BRP+1) * (TSEG1+TSEG2+3) / Fsys
-//   500 K: (0+1)*(62+15+3)/40e6 = 80/40e6  = 2 us  → 500 Kbit/s, sample point ~79%
-//     2 M: (0+1)*(14+ 3+3)/40e6 = 20/40e6  = 500 ns → 2 Mbit/s,  sample point ~75%
-static const BitTiming kBitTiming500K40MHz = {0, 62, 15, 15};
-static const BitTiming kBitTiming2M40MHz   = {0, 14, 3, 3};
+//   500 K: (0+1)*(62+15+3)/40e6 = 80/40e6  = 2 us  → 500 Kbit/s, sample point 80%
+//     2 M: (0+1)*(14+ 3+3)/40e6 = 20/40e6  = 500 ns → 2 Mbit/s,  sample point 80%
+inline constexpr BitTiming kBitTiming500K40MHz = {0, 62, 15, 15};
+inline constexpr BitTiming kBitTiming2M40MHz   = {0, 14, 3, 3};
 
 // Main class
 class MCP251863 {
@@ -315,6 +319,9 @@ class MCP251863 {
 
     // read status flags for one FIFO
     FifoStatus getFIFOStatus(uint8_t fifoNum);
+
+    // clear the default RX FIFO's sticky overflow flag
+    int clearRxOverflow();
 
     int getTXCode();
     int getRXCode();
