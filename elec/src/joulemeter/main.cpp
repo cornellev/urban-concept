@@ -1,45 +1,36 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "chuds/io.hpp"
+#include "common/interval.hpp"
 #include "common/mcp_bus.hpp"
+#include "common/wire.hpp"
 #include "config.hpp"
 #include "hardware/adc.h"
 #include "pico/stdlib.h"
 
-// this node's id: telemetry source
-constexpr std::uint8_t kNodeId = 0x30;
+using namespace cev::joulemeter;
 
 namespace {
 
-// telemetry body, published every report period
-struct Telemetry {
-    float voltage;  // bus volts
-    float current;  // bus amps
-    float power;    // watts
-    float energy;   // joules since boot
-};
-static_assert(sizeof(Telemetry) == 16);
+static_assert(kVoltageAdc >= 26 && kVoltageAdc <= 29);
+static_assert(kCurrentAdc >= 26 && kCurrentAdc <= 29);
 
 // adc channel is the gpio offset from the adc base at gpio 26
 unsigned channel_of(unsigned gpio) { return gpio - 26; }
 
-// discard one sample after switching the mux per the datasheet
-std::uint16_t read_raw(unsigned gpio) {
+// average many samples so noise stays under the current/voltage precision spec
+constexpr unsigned kOversample = 16;
+
+float read_raw(unsigned gpio) {
     adc_select_input(channel_of(gpio));
-    (void)adc_read();
-    return adc_read();
-}
-
-float raw_to_volts(std::uint16_t raw) { return static_cast<float>(raw) / kAdcCountsMax * kAdcVref; }
-
-chuds::TxStatus publish(cev::Mcp251863Transport& tx, const Telemetry& t) {
-    if (auto m =
-            chuds::make_message(chuds::MsgClass::Telemetry, kNodeId, chuds::MsgType::Update, t)) {
-        return chuds::send(tx, *m);
+    std::uint32_t sum = 0;
+    for (unsigned i = 0; i < kOversample; ++i) {
+        sum += adc_read();
     }
-    return chuds::TxStatus::Error;
+    return static_cast<float>(sum) / kOversample;
 }
+
+float raw_to_volts(float raw) { return raw / kAdcCountsMax * kAdcVref; }
 
 }  // namespace
 
@@ -47,50 +38,60 @@ chuds::TxStatus publish(cev::Mcp251863Transport& tx, const Telemetry& t) {
 int main() {
     stdio_init_all();
 
-    gpio_init(PICO_DEFAULT_LED_PIN);
-    gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
-    gpio_put(PICO_DEFAULT_LED_PIN, true);
+    gpio_init(kStatusLed);
+    gpio_set_dir(kStatusLed, GPIO_OUT);
+    gpio_put(kStatusLed, true);
 
     adc_init();
     adc_gpio_init(kVoltageAdc);
     adc_gpio_init(kCurrentAdc);
 
-    cev::McpBus bus{{kSpiSck, kSpiMosi, kSpiMiso, kMcpCs, kMcpStby}};
-    auto& tx = bus.transport();
-
-    // latched so a persistent fault prints once, not every loop
-    bool bus_ok = bus.ok();
-
-    constexpr std::uint32_t samples_per_report = kReportPeriodMs / kSamplePeriodMs;
+    cev::McpBus bus{{.sck  = kSpiSck,
+                     .mosi = kSpiMosi,
+                     .miso = kSpiMiso,
+                     .cs   = kMcpCs,
+                     .stby = kMcpStby,
+                     .nint = kMcpInt}};
 
     // energy accumulates over a whole run, so integrate in double to hold resolution
     double joules{};
+    // energy at the last report
+    double report_joules{};
+    // sums over the current report period
+    double period_s{};
+    double v_sum{};
+    double i_sum{};
     std::uint32_t n{};
     absolute_time_t prev = get_absolute_time();
+    cev::Interval report{kReportPeriodMs};
 
     while (true) {
         const float v_bus = raw_to_volts(read_raw(kVoltageAdc)) * kVoltageDividerRatio;
         const float amps =
             (raw_to_volts(read_raw(kCurrentAdc)) - kCurrentZeroVolts) / kCurrentVoltsPerAmp;
-        const float power = v_bus * amps;
 
-        // integrate over the real elapsed interval, not the nominal period
+        // integrate over the real elapsed interval
         const absolute_time_t now = get_absolute_time();
         const double dt = static_cast<double>(absolute_time_diff_us(prev, now)) / 1'000'000.0;
         prev            = now;
-        joules += static_cast<double>(power) * dt;
+        joules += static_cast<double>(v_bus * amps) * dt;
+        period_s += dt;
+        v_sum += v_bus;
+        i_sum += amps;
+        ++n;
 
-        if (++n >= samples_per_report) {
-            n = 0;
-            const chuds::TxStatus st =
-                publish(tx, {v_bus, amps, power, static_cast<float>(joules)});
-            if (bus_ok && (st == chuds::TxStatus::BusOff || st == chuds::TxStatus::Error)) {
-                std::printf("can tx fault\n");
-                bus_ok = false;
-            }
-            printf("v=%.2f V  i=%.2f A  p=%.1f W  e=%.1f J\n", v_bus, amps, power, joules);
+        if (report.due()) {
+            const Telemetry t{static_cast<float>(v_sum / n), static_cast<float>(i_sum / n),
+                              static_cast<float>((joules - report_joules) / period_s),
+                              static_cast<float>(joules)};
+            bus.publish(kNodeId, t);
+            printf("v=%.2f V  i=%.2f A  p=%.1f W  e=%.1f J\n", t.voltage, t.current, t.power,
+                   joules);
+            report_joules = joules;
+            period_s      = 0;
+            v_sum         = 0;
+            i_sum         = 0;
+            n             = 0;
         }
-
-        sleep_ms(kSamplePeriodMs);
     }
 }

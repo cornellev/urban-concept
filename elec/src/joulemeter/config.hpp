@@ -2,6 +2,11 @@
 
 #include <cstdint>
 
+#include "pico/stdlib.h"
+
+// the pico's onboard LED, held on while the firmware runs
+constexpr unsigned kStatusLed = PICO_DEFAULT_LED_PIN;
+
 // adc pins, gpio 26-29
 constexpr unsigned kVoltageAdc = 26;
 constexpr unsigned kCurrentAdc = 27;
@@ -11,9 +16,8 @@ constexpr float kAdcVref      = 3.3f;
 constexpr float kAdcCountsMax = 4095.0f;
 
 // bus voltage sensed through a divider: v_bus = v_adc * kVoltageDividerRatio
-// design range 0-60 v, 60/3.3 maps full scale to vref
-// placeholder, set from the actual resistor values
-constexpr float kVoltageDividerRatio = 60.0f / 3.3f;
+// r13 115k over r14 5k per the Joulemeter_V1.4 bom, full scale 79.2 v
+constexpr float kVoltageDividerRatio = (115'000.0f + 5'000.0f) / 5'000.0f;
 
 // current from the low-side shunt drop through an amp stage, 0-200 a unidirectional
 // i = (v_adc - kCurrentZeroVolts) / kCurrentVoltsPerAmp
@@ -21,15 +25,13 @@ constexpr float kVoltageDividerRatio = 60.0f / 3.3f;
 constexpr float kCurrentZeroVolts   = 0.0f;
 constexpr float kCurrentVoltsPerAmp = 3.3f / 200.0f;
 
-// sample period, also the integration dt for joules
-constexpr std::uint32_t kSamplePeriodMs = 10;
-
-// how often to report the running total over can
+// how often to report period averages and the running total over can
 constexpr std::uint32_t kReportPeriodMs = 500;
 
-// mcp251863 can-fd controller spi wiring, todo set from the pcb
-constexpr unsigned kSpiSck  = 18;
-constexpr unsigned kSpiMosi = 19;
-constexpr unsigned kSpiMiso = 16;
-constexpr unsigned kMcpCs   = 17;
-constexpr unsigned kMcpStby = 15;
+// mcp251863 can-fd controller spi wiring, per the Joulemeter_V1.4 schematic
+constexpr unsigned kSpiSck  = 10;
+constexpr unsigned kSpiMosi = 11;
+constexpr unsigned kSpiMiso = 8;
+constexpr unsigned kMcpCs   = 9;
+constexpr unsigned kMcpStby = 12;
+constexpr unsigned kMcpInt  = 13;

@@ -11,3 +11,4 @@ constexpr unsigned kSpiMosi = 19;
 constexpr unsigned kSpiMiso = 16;
 constexpr unsigned kMcpCs   = 17;
 constexpr unsigned kMcpStby = 15;
+constexpr unsigned kMcpInt  = 20;

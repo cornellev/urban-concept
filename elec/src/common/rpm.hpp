@@ -24,12 +24,14 @@ inline void rpm_on_edge(unsigned gpio, std::uint32_t /*events*/) {
 
 // count rising edges on two wheel-speed inputs
 // claims the core's single gpio irq callback
+// inputs expect a pnp sensor driving 12v through the board's divider, which also holds the pin low
 inline void rpm_init(unsigned left_pin, unsigned right_pin) {
     g_rpm_left_pin  = left_pin;
     g_rpm_right_pin = right_pin;
     for (unsigned pin : {left_pin, right_pin}) {
         gpio_init(pin);
         gpio_set_dir(pin, GPIO_IN);
+        gpio_disable_pulls(pin);
     }
     gpio_set_irq_enabled_with_callback(left_pin, GPIO_IRQ_EDGE_RISE, true, &rpm_on_edge);
     gpio_set_irq_enabled(right_pin, GPIO_IRQ_EDGE_RISE, true);

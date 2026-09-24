@@ -1,46 +1,27 @@
 #include <cstdint>
-#include <cstdio>
 #include <initializer_list>
 
 #include "chuds/io.hpp"
+#include "common/interval.hpp"
 #include "common/mcp_bus.hpp"
 #include "common/rpm.hpp"
+#include "common/wire.hpp"
 #include "config.hpp"
 #include "hardware/adc.h"
 #include "pico/stdlib.h"
 
-// this node's id: telemetry source and command recipient
-constexpr std::uint8_t kNodeId = 0x10;
+using namespace cev::front_aux;
 
 // steering sensor adc channel, derived from its gpio
+static_assert(kSteeringAdc >= 26 && kSteeringAdc <= 29);
 constexpr unsigned kSteeringChannel = kSteeringAdc - 26;
 
 constexpr std::uint32_t kBlinkHalfPeriodMs = 333;
 constexpr std::uint32_t kPublishPeriodMs   = 100;
+// the leader must resend commands within this period or all outputs turn off
+constexpr std::uint32_t kCommandTimeoutMs = 1000;
 
 namespace {
-
-// telemetry body, published once per cycle
-struct Telemetry {
-    std::uint16_t rpm_left;   // wheel edges in the last window
-    std::uint16_t rpm_right;  // wheel edges in the last window
-    std::uint16_t steering;   // raw adc, 0-4095
-};
-static_assert(sizeof(Telemetry) == 6);
-
-enum class Actuator : std::uint8_t {
-    TurnLeft,
-    TurnRight,
-    Headlights,
-    Horn,
-};
-
-// command body: set one actuator from the bus
-struct AuxCommand {
-    Actuator actuator;
-    std::uint8_t on;
-};
-static_assert(sizeof(AuxCommand) == 2);
 
 // actuator state, driven by bus commands
 struct Outputs {
@@ -73,12 +54,23 @@ void all_off(Outputs& o) {
 }
 
 void apply_command(Outputs& o, const AuxCommand& c) {
-    const bool on = c.on != 0;
+    const bool on = c.value != 0;
     switch (c.actuator) {
-        case Actuator::TurnLeft: o.turn_left = on; break;
-        case Actuator::TurnRight: o.turn_right = on; break;
+        case Actuator::TurnLeft:
+            o.turn_left = on;
+            if (!on) {
+                gpio_put(kTurnLeft, false);
+            }
+            break;
+        case Actuator::TurnRight:
+            o.turn_right = on;
+            if (!on) {
+                gpio_put(kTurnRight, false);
+            }
+            break;
         case Actuator::Headlights: o.headlights = on; break;
         case Actuator::Horn: o.horn = on; break;
+        default: return;
     }
     drive(o);
 }
@@ -93,58 +85,55 @@ int main() {
     adc_init();
     adc_gpio_init(kSteeringAdc);
 
-    cev::McpBus bus{{kSpiSck, kSpiMosi, kSpiMiso, kMcpCs, kMcpStby}};
-    auto& tx = bus.transport();
-
-    // latched so a persistent fault prints once, not every loop
-    bool bus_ok = bus.ok();
+    cev::McpBus bus{{.sck  = kSpiSck,
+                     .mosi = kSpiMosi,
+                     .miso = kSpiMiso,
+                     .cs   = kMcpCs,
+                     .stby = kMcpStby,
+                     .nint = kMcpInt}};
 
     Outputs out{};
     // a stop latches until reset; todo clear on a ratified resume command
     bool stopped{};
     bool blink_on{};
-    absolute_time_t next_blink = make_timeout_time_ms(kBlinkHalfPeriodMs);
-    absolute_time_t next_pub   = make_timeout_time_ms(kPublishPeriodMs);
+    cev::Interval blink{kBlinkHalfPeriodMs};
+    cev::Interval pub{kPublishPeriodMs};
+    absolute_time_t command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
 
     while (true) {
-        auto rx = chuds::recv(tx);
-        if (bus_ok &&
-            (rx.status == chuds::RxStatus::BusOff || rx.status == chuds::RxStatus::Overflow)) {
-            std::printf("can rx fault\n");
-            bus_ok = false;
-        }
-        if (rx.status == chuds::RxStatus::Received && rx.msg) {
+        while (true) {
+            const auto rx = bus.recv();
+            if (rx.status != chuds::RxStatus::Received || !rx.msg) {
+                break;
+            }
             const chuds::Message& m = *rx.msg;
             if (m.cls == chuds::MsgClass::Emergency && m.type == chuds::MsgType::Stop) {
                 stopped = true;
                 all_off(out);
-            } else if (!stopped && m.cls == chuds::MsgClass::Command && m.subaddress == kNodeId) {
+            } else if (!stopped && m.cls == chuds::MsgClass::Command && m.subaddress == kNodeId &&
+                       m.type == chuds::MsgType::Update) {
                 if (auto c = chuds::body_as<AuxCommand>(m)) {
                     apply_command(out, *c);
+                    command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
                 }
             }
         }
 
-        if (absolute_time_diff_us(get_absolute_time(), next_blink) <= 0) {
-            blink_on   = !blink_on;
-            next_blink = delayed_by_ms(next_blink, kBlinkHalfPeriodMs);
+        if (time_reached(command_deadline)) {
+            all_off(out);
+            command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
+        }
+
+        if (blink.due()) {
+            blink_on = !blink_on;
             gpio_put(kTurnLeft, out.turn_left && blink_on);
             gpio_put(kTurnRight, out.turn_right && blink_on);
         }
 
-        if (absolute_time_diff_us(get_absolute_time(), next_pub) <= 0) {
-            next_pub                 = delayed_by_ms(next_pub, kPublishPeriodMs);
+        if (pub.due()) {
             const cev::RpmCounts rpm = cev::rpm_take();
             adc_select_input(kSteeringChannel);
-            const Telemetry t{rpm.left, rpm.right, adc_read()};
-            if (auto m = chuds::make_message(chuds::MsgClass::Telemetry, kNodeId,
-                                             chuds::MsgType::Update, t)) {
-                const chuds::TxStatus st = chuds::send(tx, *m);
-                if (bus_ok && (st == chuds::TxStatus::BusOff || st == chuds::TxStatus::Error)) {
-                    std::printf("can tx fault\n");
-                    bus_ok = false;
-                }
-            }
+            bus.publish(kNodeId, Telemetry{rpm.left, rpm.right, adc_read()});
         }
     }
 }

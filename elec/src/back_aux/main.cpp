@@ -1,63 +1,92 @@
 #include <cstdint>
-#include <cstdio>
 #include <initializer_list>
 
 #include "chuds/io.hpp"
+#include "common/interval.hpp"
 #include "common/mcp_bus.hpp"
 #include "common/rpm.hpp"
+#include "common/wire.hpp"
 #include "config.hpp"
 #include "hardware/adc.h"
+#include "hardware/clocks.h"
 #include "hardware/pwm.h"
 #include "pico/stdlib.h"
 
-// this node's id: telemetry source and command recipient
-constexpr std::uint8_t kNodeId = 0x20;
+using namespace cev::back_aux;
 
 // brake sensor adc channel, derived from its gpio
+static_assert(kBrakeAdc >= 26 && kBrakeAdc <= 29);
 constexpr unsigned kBrakeChannel = kBrakeAdc - 26;
 
 constexpr std::uint32_t kBlinkHalfPeriodMs = 333;
 constexpr std::uint32_t kPublishPeriodMs   = 100;
+// the leader must resend commands within this period or all outputs turn off
+constexpr std::uint32_t kCommandTimeoutMs = 1000;
 
-// servo pwm pulse range, 50 hz
-constexpr std::uint16_t kWiperMinUs = 1000;
-constexpr std::uint16_t kWiperMaxUs = 2000;
+// servo pwm, 50 hz; center pulse and half-span at full deflection
+constexpr std::uint16_t kWiperCenterUs   = 1500;
+constexpr std::uint16_t kWiperHalfSpanUs = 500;
 
 namespace {
-
-// telemetry body, published once per cycle
-struct Telemetry {
-    std::uint16_t rpm_left;   // wheel edges in the last window
-    std::uint16_t rpm_right;  // wheel edges in the last window
-    std::uint16_t brake;      // raw adc, 0-4095
-};
-static_assert(sizeof(Telemetry) == 6);
-
-enum class Actuator : std::uint8_t {
-    TurnLeft,
-    TurnRight,
-    Wiper,
-};
-
-// command body: set one actuator from the bus
-// value is on/off for the turn signals, a 0-255 position for the wiper
-struct AuxCommand {
-    Actuator actuator;
-    std::uint8_t value;
-};
-static_assert(sizeof(AuxCommand) == 2);
 
 // actuator state, driven by bus commands
 struct Outputs {
     bool turn_left{};
     bool turn_right{};
-    std::uint8_t wiper{};
 };
 
-void set_wiper(std::uint8_t level) {
-    const std::uint16_t us =
-        kWiperMinUs + static_cast<std::uint16_t>((kWiperMaxUs - kWiperMinUs) * level / 255);
+// wiper sweep state, held apart from Outputs so a stop parks it instead of snapping
+struct Wiper {
+    int angle{kWiperParkDeg};
+    int dir{1};
+    bool running{};
+    bool parking{};
+    absolute_time_t dwell_until{};
+};
+
+void set_wiper_deg(int deg) {
+    const auto us =
+        static_cast<std::uint16_t>(kWiperCenterUs + deg * kWiperHalfSpanUs / kWiperMaxDeg);
     pwm_set_gpio_level(kWiperPwm, us);
+}
+
+// step one increment toward target, clamped
+int step_toward(int from, int to) {
+    if (from < to) {
+        return from + kWiperStepDeg < to ? from + kWiperStepDeg : to;
+    }
+    if (from > to) {
+        return from - kWiperStepDeg > to ? from - kWiperStepDeg : to;
+    }
+    return from;
+}
+
+// advance the sweep one tick; runs even while stopped so a park completes
+void wiper_tick(Wiper& w) {
+    if (w.parking) {
+        if (w.angle != kWiperParkDeg) {
+            w.angle = step_toward(w.angle, kWiperParkDeg);
+            set_wiper_deg(w.angle);
+        }
+        return;
+    }
+    if (!w.running) {
+        return;
+    }
+    if (absolute_time_diff_us(get_absolute_time(), w.dwell_until) > 0) {
+        return;
+    }
+    w.angle += w.dir * kWiperStepDeg;
+    if (w.angle >= kWiperMaxDeg) {
+        w.angle       = kWiperMaxDeg;
+        w.dir         = -1;
+        w.dwell_until = make_timeout_time_ms(kWiperDwellMs);
+    } else if (w.angle <= kWiperMinDeg) {
+        w.angle       = kWiperMinDeg;
+        w.dir         = 1;
+        w.dwell_until = make_timeout_time_ms(kWiperDwellMs);
+    }
+    set_wiper_deg(w.angle);
 }
 
 void init_outputs() {
@@ -71,30 +100,42 @@ void init_outputs() {
     gpio_set_dir(kRunningLed, GPIO_OUT);
     gpio_put(kRunningLed, true);
 
-    // 1 us tick (125 mhz / 125), 20000 us period gives 50 hz
+    // 1 us tick from clk_sys, 20000 ticks per frame gives 50 hz
     gpio_set_function(kWiperPwm, GPIO_FUNC_PWM);
     const unsigned slice = pwm_gpio_to_slice_num(kWiperPwm);
-    pwm_set_clkdiv(slice, 125.0f);
-    pwm_set_wrap(slice, 20000);
+    pwm_set_clkdiv(slice, static_cast<float>(clock_get_hz(clk_sys)) / 1'000'000.0f);
+    pwm_set_wrap(slice, 19999);
     pwm_set_enabled(slice, true);
-    set_wiper(0);
+    set_wiper_deg(kWiperParkDeg);
 }
 
-void all_off(Outputs& o) {
+void all_off(Outputs& o, Wiper& w) {
     o = Outputs{};
     gpio_put(kTurnLeft, false);
     gpio_put(kTurnRight, false);
-    set_wiper(0);
+    w.running = false;
+    w.parking = true;
 }
 
-void apply_command(Outputs& o, const AuxCommand& c) {
+void apply_command(Outputs& o, Wiper& w, const AuxCommand& c) {
     switch (c.actuator) {
-        case Actuator::TurnLeft: o.turn_left = c.value != 0; break;
-        case Actuator::TurnRight: o.turn_right = c.value != 0; break;
-        case Actuator::Wiper:
-            o.wiper = c.value;
-            set_wiper(o.wiper);
+        case Actuator::TurnLeft:
+            o.turn_left = c.value != 0;
+            if (!o.turn_left) {
+                gpio_put(kTurnLeft, false);
+            }
             break;
+        case Actuator::TurnRight:
+            o.turn_right = c.value != 0;
+            if (!o.turn_right) {
+                gpio_put(kTurnRight, false);
+            }
+            break;
+        case Actuator::Wiper:
+            w.running = c.value != 0;
+            w.parking = c.value == 0;
+            break;
+        default: break;
     }
 }
 
@@ -108,58 +149,61 @@ int main() {
     adc_init();
     adc_gpio_init(kBrakeAdc);
 
-    cev::McpBus bus{{kSpiSck, kSpiMosi, kSpiMiso, kMcpCs, kMcpStby}};
-    auto& tx = bus.transport();
-
-    // latched so a persistent fault prints once, not every loop
-    bool bus_ok = bus.ok();
+    cev::McpBus bus{{.sck  = kSpiSck,
+                     .mosi = kSpiMosi,
+                     .miso = kSpiMiso,
+                     .cs   = kMcpCs,
+                     .stby = kMcpStby,
+                     .nint = kMcpInt}};
 
     Outputs out{};
+    Wiper wiper{};
     // a stop latches until reset; todo clear on a ratified resume command
     bool stopped{};
     bool blink_on{};
-    absolute_time_t next_blink = make_timeout_time_ms(kBlinkHalfPeriodMs);
-    absolute_time_t next_pub   = make_timeout_time_ms(kPublishPeriodMs);
+    cev::Interval blink{kBlinkHalfPeriodMs};
+    cev::Interval pub{kPublishPeriodMs};
+    cev::Interval wiper_iv{kWiperTickMs};
+    absolute_time_t command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
 
     while (true) {
-        auto rx = chuds::recv(tx);
-        if (bus_ok &&
-            (rx.status == chuds::RxStatus::BusOff || rx.status == chuds::RxStatus::Overflow)) {
-            std::printf("can rx fault\n");
-            bus_ok = false;
-        }
-        if (rx.status == chuds::RxStatus::Received && rx.msg) {
+        while (true) {
+            const auto rx = bus.recv();
+            if (rx.status != chuds::RxStatus::Received || !rx.msg) {
+                break;
+            }
             const chuds::Message& m = *rx.msg;
             if (m.cls == chuds::MsgClass::Emergency && m.type == chuds::MsgType::Stop) {
                 stopped = true;
-                all_off(out);
-            } else if (!stopped && m.cls == chuds::MsgClass::Command && m.subaddress == kNodeId) {
+                all_off(out, wiper);
+            } else if (!stopped && m.cls == chuds::MsgClass::Command && m.subaddress == kNodeId &&
+                       m.type == chuds::MsgType::Update) {
                 if (auto c = chuds::body_as<AuxCommand>(m)) {
-                    apply_command(out, *c);
+                    apply_command(out, wiper, *c);
+                    command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
                 }
             }
         }
 
-        if (absolute_time_diff_us(get_absolute_time(), next_blink) <= 0) {
-            blink_on   = !blink_on;
-            next_blink = delayed_by_ms(next_blink, kBlinkHalfPeriodMs);
+        if (time_reached(command_deadline)) {
+            all_off(out, wiper);
+            command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
+        }
+
+        if (blink.due()) {
+            blink_on = !blink_on;
             gpio_put(kTurnLeft, out.turn_left && blink_on);
             gpio_put(kTurnRight, out.turn_right && blink_on);
         }
 
-        if (absolute_time_diff_us(get_absolute_time(), next_pub) <= 0) {
-            next_pub                 = delayed_by_ms(next_pub, kPublishPeriodMs);
+        if (wiper_iv.due()) {
+            wiper_tick(wiper);
+        }
+
+        if (pub.due()) {
             const cev::RpmCounts rpm = cev::rpm_take();
             adc_select_input(kBrakeChannel);
-            const Telemetry t{rpm.left, rpm.right, adc_read()};
-            if (auto m = chuds::make_message(chuds::MsgClass::Telemetry, kNodeId,
-                                             chuds::MsgType::Update, t)) {
-                const chuds::TxStatus st = chuds::send(tx, *m);
-                if (bus_ok && (st == chuds::TxStatus::BusOff || st == chuds::TxStatus::Error)) {
-                    std::printf("can tx fault\n");
-                    bus_ok = false;
-                }
-            }
+            bus.publish(kNodeId, Telemetry{rpm.left, rpm.right, adc_read()});
         }
     }
 }

@@ -14,15 +14,22 @@ int main() {
     gpio_init(kStatusLed);
     gpio_set_dir(kStatusLed, GPIO_OUT);
 
-    cev::McpBus bus{
-        {.sck = kSpiSck, .mosi = kSpiMosi, .miso = kSpiMiso, .cs = kMcpCs, .stby = kMcpStby}};
+    cev::McpBus bus{{.sck  = kSpiSck,
+                     .mosi = kSpiMosi,
+                     .miso = kSpiMiso,
+                     .cs   = kMcpCs,
+                     .stby = kMcpStby,
+                     .nint = kMcpInt}};
 
     bool led_on{};
     cev::Interval blink{kBlinkHalfPeriodMs};
 
     while (true) {
-        auto rx = bus.recv();
-        if (rx.status == chuds::RxStatus::Received && rx.msg) {
+        while (true) {
+            const auto rx = bus.recv();
+            if (rx.status != chuds::RxStatus::Received || !rx.msg) {
+                break;
+            }
             // handle messages addressed to this node here
         }
 
