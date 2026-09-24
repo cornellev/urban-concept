@@ -5,7 +5,7 @@ project(chuds CXX)
 # core library
 add_library(chuds INTERFACE)
 target_include_directories(chuds INTERFACE ${CMAKE_CURRENT_LIST_DIR}/..)
-target_compile_features(chuds INTERFACE cxx_std_20)
+target_compile_features(chuds INTERFACE cxx_std_23)
 
 # opt-in Linux SocketCAN adapter
 add_library(chuds_socketcan INTERFACE)

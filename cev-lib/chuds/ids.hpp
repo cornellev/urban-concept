@@ -2,6 +2,7 @@
 
 #include <compare>
 #include <cstdint>
+#include <utility>
 
 namespace chuds {
 
@@ -28,7 +29,7 @@ class CanId {
 
     // pack a class and subaddress into an id
     constexpr CanId(MsgClass cls, std::uint8_t subaddress) {
-        const int class_bits = static_cast<int>(cls) << kClassShift;
+        const int class_bits = std::to_underlying(cls) << kClassShift;
 
         raw_ = static_cast<std::uint16_t>(class_bits | subaddress);
     }

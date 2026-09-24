@@ -3,8 +3,10 @@
 #include <array>
 #include <cstdint>
 #include <string_view>
+#include <utility>
 
 #include "chuds/message.hpp"
+#include "chuds/wire.hpp"
 
 using namespace chuds;
 
@@ -40,7 +42,7 @@ TEST_CASE("encode lays out id, type, length, then body") {
     REQUIRE(f.has_value());
     CHECK(f->id.raw() == 0x140);
     CHECK(f->len == 4);
-    CHECK(f->data[0] == static_cast<std::uint8_t>(MsgType::Update));
+    CHECK(f->data[0] == std::to_underlying(MsgType::Update));
     CHECK(f->data[1] == 2);
     CHECK(f->data[2] == 0x01);
     CHECK(f->data[3] == 0x1E);
@@ -68,7 +70,7 @@ TEST_CASE("decode round-trips encode") {
 TEST_CASE("decode recovers the true body length past CAN-FD padding") {
     CanFrame f{};
     f.id      = CanId(MsgClass::Telemetry, 0x10);
-    f.data[0] = static_cast<std::uint8_t>(MsgType::Update);
+    f.data[0] = std::to_underlying(MsgType::Update);
     f.data[1] = 3;  // true body length
     f.data[2] = 0xAA;
     f.data[3] = 0xBB;
@@ -189,43 +191,43 @@ TEST_CASE("make_message rejects an invalid class or type") {
 
 TEST_CASE("a frame shorter than the header is malformed") {
     CanFrame f{.len = 1};
-    CHECK_FALSE(decode(f).has_value());
+    CHECK(decode(f).error() == DecodeError::BadLength);
 }
 
 TEST_CASE("a length byte larger than the frame is rejected") {
     CanFrame f{};
     f.data[1] = 20;  // claims 20 body bytes
     f.len     = 4;   // but only 2 are present
-    CHECK_FALSE(decode(f).has_value());
+    CHECK(decode(f).error() == DecodeError::BodyOverrun);
 }
 
 TEST_CASE("decode rejects an id outside the 11-bit standard range") {
     CanFrame f{};
     f.id  = CanId::from_raw(0x800);  // would otherwise alias to Emergency/STOP via the class mask
     f.len = 2;
-    CHECK_FALSE(decode(f).has_value());
+    CHECK(decode(f).error() == DecodeError::NonStandardId);
 }
 
 TEST_CASE("decode rejects a reserved class") {
     CanFrame f{};
     f.id  = CanId::from_raw(0x300);
     f.len = 2;
-    CHECK_FALSE(decode(f).has_value());
+    CHECK(decode(f).error() == DecodeError::UnknownClass);
 }
 
 TEST_CASE("decode rejects an unknown type byte") {
     CanFrame f{};
     f.data[0] = 5;
     f.len     = 2;
-    CHECK_FALSE(decode(f).has_value());
+    CHECK(decode(f).error() == DecodeError::UnknownType);
 }
 
 TEST_CASE("decode rejects a len that is not a CAN-FD size") {
     CanFrame f{};
     f.len = 9;
-    CHECK_FALSE(decode(f).has_value());
+    CHECK(decode(f).error() == DecodeError::BadLength);
     f.len = 13;
-    CHECK_FALSE(decode(f).has_value());
+    CHECK(decode(f).error() == DecodeError::BadLength);
 }
 
 TEST_CASE("body_view clamps a corrupt body_len instead of reading out of bounds") {
@@ -238,7 +240,7 @@ TEST_CASE("decode rejects a nonsensical len past the FD payload size") {
     CanFrame f{};
     f.data[1] = 4;
     f.len     = 255;
-    CHECK_FALSE(decode(f).has_value());
+    CHECK(decode(f).error() == DecodeError::BadLength);
 }
 
 TEST_CASE("a struct body round-trips through make_message and body_as") {
@@ -267,4 +269,18 @@ TEST_CASE("struct make_message and body_as are constexpr") {
     static_assert(m.has_value());
     static_assert(body_as<WheelSpeed>(*m)->rpm == 42);
     CHECK(true);
+}
+
+TEST_CASE("body state goes out as a 3-byte broadcast command on 0x108") {
+    const cev::BodyState s{
+        static_cast<std::uint8_t>(cev::BodyState::kHeadlights | cev::BodyState::kLeftTurn)};
+    const auto m = make_message(MsgClass::Command, cev::kBodyStateId, MsgType::Update, s);
+    REQUIRE(m.has_value());
+    const auto f = encode(*m);
+    REQUIRE(f.has_value());
+    CHECK(f->id.raw() == 0x108);
+    CHECK(f->len == 3);
+    CHECK(f->data[0] == std::to_underlying(MsgType::Update));
+    CHECK(f->data[1] == 1);
+    CHECK(f->data[2] == 0x05);
 }

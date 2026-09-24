@@ -5,11 +5,13 @@
 #include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <limits>
 #include <optional>
 #include <span>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 
 #include "chuds/frame.hpp"
 #include "chuds/ids.hpp"
@@ -170,7 +172,7 @@ struct StopView {
 
     CanFrame f{};
     f.id                   = CanId(m.cls, m.subaddress);
-    f.data[kTypeOffset]    = static_cast<std::uint8_t>(m.type);
+    f.data[kTypeOffset]    = std::to_underlying(m.type);
     f.data[kBodyLenOffset] = m.body_len;
 
     std::copy_n(m.body.begin(), m.body_len, f.data.begin() + kHeaderLen);
@@ -181,27 +183,43 @@ struct StopView {
     return f;
 }
 
-[[nodiscard]] constexpr std::optional<Message> decode(const CanFrame& f) {
-    // ensure we are using a standard can-fd id, and id class is valid
-    if (!f.id.is_standard() || !is_valid(f.id.cls())) {
-        return std::nullopt;
+// why decode rejected a frame
+enum class DecodeError : std::uint8_t {
+    // the id is past the 11-bit standard range
+    NonStandardId,
+    // the id's class is reserved
+    UnknownClass,
+    // the frame is shorter than the header or not a CAN-FD length
+    BadLength,
+    // the type byte is not a known MsgType
+    UnknownType,
+    // body_len claims more bytes than the frame carries
+    BodyOverrun,
+};
+
+[[nodiscard]] constexpr std::expected<Message, DecodeError> decode(const CanFrame& f) {
+    if (!f.id.is_standard()) {
+        return std::unexpected(DecodeError::NonStandardId);
+    }
+
+    if (!is_valid(f.id.cls())) {
+        return std::unexpected(DecodeError::UnknownClass);
     }
 
     // ensure the frame is longer than the header length, and is actually a valid length
     if (f.len < kHeaderLen || !is_valid_fd_len(f.len)) {
-        return std::nullopt;
+        return std::unexpected(DecodeError::BadLength);
     }
 
-    // ensure the frame type is valid
     if (!is_valid(frame_type(f))) {
-        return std::nullopt;
+        return std::unexpected(DecodeError::UnknownType);
     }
 
     const std::uint8_t body_len = frame_body_len(f);
 
     // the claimed body must fit within the frame
     if (kHeaderLen + body_len > f.len) {
-        return std::nullopt;
+        return std::unexpected(DecodeError::BodyOverrun);
     }
 
     Message m{
