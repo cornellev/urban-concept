@@ -2,9 +2,33 @@
 
 #include <cstdint>
 
+namespace cev {
+
+// command subaddress of the leader's broadcast body state, can id 0x108
+constexpr std::uint8_t kBodyStateId = 0x08;
+
+// desired state of the car's body outputs, broadcast by the leader
+// resent on change and periodically, each node drives only the outputs it has
+struct BodyState {
+    // bits 6-7 are reserved and sent as 0
+    static constexpr std::uint8_t kLeftTurn   = 1 << 0;
+    static constexpr std::uint8_t kRightTurn  = 1 << 1;
+    static constexpr std::uint8_t kHeadlights = 1 << 2;
+    static constexpr std::uint8_t kHorn       = 1 << 3;
+    static constexpr std::uint8_t kWiper      = 1 << 4;
+    // turn lamps light only while set, the leader toggles it so every node blinks in phase
+    static constexpr std::uint8_t kBlinkPhase = 1 << 5;
+
+    std::uint8_t bits{};
+    static constexpr bool chuds_wire_body = true;
+};
+static_assert(sizeof(BodyState) == 1);
+
+}  // namespace cev
+
 namespace cev::front_aux {
 
-// this node's id: telemetry source and command recipient
+// this node's id: telemetry source
 constexpr std::uint8_t kNodeId = 0x10;
 
 // telemetry body, published once per cycle
@@ -16,27 +40,11 @@ struct Telemetry {
 };
 static_assert(sizeof(Telemetry) == 6);
 
-enum class Actuator : std::uint8_t {
-    TurnLeft,
-    TurnRight,
-    Headlights,
-    Horn,
-};
-
-// command body: set one actuator from the bus
-// value is on/off
-struct AuxCommand {
-    Actuator actuator;
-    std::uint8_t value;
-    static constexpr bool chuds_wire_body = true;
-};
-static_assert(sizeof(AuxCommand) == 2);
-
 }  // namespace cev::front_aux
 
 namespace cev::back_aux {
 
-// this node's id: telemetry source and command recipient
+// this node's id: telemetry source
 constexpr std::uint8_t kNodeId = 0x20;
 
 // telemetry body, published once per cycle
@@ -47,22 +55,6 @@ struct Telemetry {
     static constexpr bool chuds_wire_body = true;
 };
 static_assert(sizeof(Telemetry) == 6);
-
-enum class Actuator : std::uint8_t {
-    TurnLeft,
-    TurnRight,
-    Wiper,
-};
-
-// command body: set one actuator from the bus
-// value is on/off
-// the wiper runs its own sweep while on
-struct AuxCommand {
-    Actuator actuator;
-    std::uint8_t value;
-    static constexpr bool chuds_wire_body = true;
-};
-static_assert(sizeof(AuxCommand) == 2);
 
 }  // namespace cev::back_aux
 

@@ -18,10 +18,11 @@ using namespace cev::back_aux;
 static_assert(kBrakeAdc >= 26 && kBrakeAdc <= 29);
 constexpr unsigned kBrakeChannel = kBrakeAdc - 26;
 
-constexpr std::uint32_t kBlinkHalfPeriodMs = 333;
-constexpr std::uint32_t kPublishPeriodMs   = 100;
-// the leader must resend commands within this period or all outputs turn off
+constexpr std::uint32_t kPublishPeriodMs = 100;
+// the leader must resend body state within this period or outputs fall back to their safe state
 constexpr std::uint32_t kCommandTimeoutMs = 1000;
+// frames handled per loop pass, the mcp rx fifo depth, so a flooded bus cannot starve the timers
+constexpr int kMaxRxPerPass = 8;
 
 // servo pwm, 50 hz; center pulse and half-span at full deflection
 constexpr std::uint16_t kWiperCenterUs   = 1500;
@@ -29,13 +30,7 @@ constexpr std::uint16_t kWiperHalfSpanUs = 500;
 
 namespace {
 
-// actuator state, driven by bus commands
-struct Outputs {
-    bool turn_left{};
-    bool turn_right{};
-};
-
-// wiper sweep state, held apart from Outputs so a stop parks it instead of snapping
+// wiper sweep state, so a stop parks the wiper instead of snapping it
 struct Wiper {
     int angle{kWiperParkDeg};
     int dir{1};
@@ -109,34 +104,13 @@ void init_outputs() {
     set_wiper_deg(kWiperParkDeg);
 }
 
-void all_off(Outputs& o, Wiper& w) {
-    o = Outputs{};
-    gpio_put(kTurnLeft, false);
-    gpio_put(kTurnRight, false);
-    w.running = false;
-    w.parking = true;
-}
-
-void apply_command(Outputs& o, Wiper& w, const AuxCommand& c) {
-    switch (c.actuator) {
-        case Actuator::TurnLeft:
-            o.turn_left = c.value != 0;
-            if (!o.turn_left) {
-                gpio_put(kTurnLeft, false);
-            }
-            break;
-        case Actuator::TurnRight:
-            o.turn_right = c.value != 0;
-            if (!o.turn_right) {
-                gpio_put(kTurnRight, false);
-            }
-            break;
-        case Actuator::Wiper:
-            w.running = c.value != 0;
-            w.parking = c.value == 0;
-            break;
-        default: break;
-    }
+// drive this node's outputs from body state bits
+void apply(std::uint8_t bits, Wiper& w) {
+    const bool lit = (bits & cev::BodyState::kBlinkPhase) != 0;
+    gpio_put(kTurnLeft, lit && (bits & cev::BodyState::kLeftTurn) != 0);
+    gpio_put(kTurnRight, lit && (bits & cev::BodyState::kRightTurn) != 0);
+    w.running = (bits & cev::BodyState::kWiper) != 0;
+    w.parking = !w.running;
 }
 
 }  // namespace
@@ -156,18 +130,17 @@ int main() {
                      .stby = kMcpStby,
                      .nint = kMcpInt}};
 
-    Outputs out{};
+    // body state bits currently applied
+    std::uint8_t body{};
     Wiper wiper{};
     // a stop latches until reset; todo clear on a ratified resume command
     bool stopped{};
-    bool blink_on{};
-    cev::Interval blink{kBlinkHalfPeriodMs};
     cev::Interval pub{kPublishPeriodMs};
     cev::Interval wiper_iv{kWiperTickMs};
     absolute_time_t command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
 
     while (true) {
-        while (true) {
+        for (int i = 0; i < kMaxRxPerPass; ++i) {
             const auto rx = bus.recv();
             if (rx.status != chuds::RxStatus::Received || !rx.msg) {
                 break;
@@ -175,25 +148,22 @@ int main() {
             const chuds::Message& m = *rx.msg;
             if (m.cls == chuds::MsgClass::Emergency && m.type == chuds::MsgType::Stop) {
                 stopped = true;
-                all_off(out, wiper);
-            } else if (!stopped && m.cls == chuds::MsgClass::Command && m.subaddress == kNodeId &&
-                       m.type == chuds::MsgType::Update) {
-                if (auto c = chuds::body_as<AuxCommand>(m)) {
-                    apply_command(out, wiper, *c);
+                body    = 0;
+                apply(body, wiper);
+            } else if (!stopped && m.cls == chuds::MsgClass::Command &&
+                       m.subaddress == cev::kBodyStateId && m.type == chuds::MsgType::Update) {
+                if (auto s = chuds::body_as<cev::BodyState>(m)) {
+                    body = s->bits;
+                    apply(body, wiper);
                     command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
                 }
             }
         }
 
         if (time_reached(command_deadline)) {
-            all_off(out, wiper);
+            body = 0;
+            apply(body, wiper);
             command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
-        }
-
-        if (blink.due()) {
-            blink_on = !blink_on;
-            gpio_put(kTurnLeft, out.turn_left && blink_on);
-            gpio_put(kTurnRight, out.turn_right && blink_on);
         }
 
         if (wiper_iv.due()) {

@@ -6,6 +6,8 @@
 #include "pico/stdlib.h"
 
 constexpr std::uint32_t kBlinkHalfPeriodMs = 500;
+// frames handled per loop pass, the mcp rx fifo depth, so a flooded bus cannot starve the timers
+constexpr int kMaxRxPerPass = 8;
 
 // template node: blinks the LED and drains the bus
 int main() {
@@ -25,7 +27,7 @@ int main() {
     cev::Interval blink{kBlinkHalfPeriodMs};
 
     while (true) {
-        while (true) {
+        for (int i = 0; i < kMaxRxPerPass; ++i) {
             const auto rx = bus.recv();
             if (rx.status != chuds::RxStatus::Received || !rx.msg) {
                 break;

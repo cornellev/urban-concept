@@ -16,20 +16,13 @@ using namespace cev::front_aux;
 static_assert(kSteeringAdc >= 26 && kSteeringAdc <= 29);
 constexpr unsigned kSteeringChannel = kSteeringAdc - 26;
 
-constexpr std::uint32_t kBlinkHalfPeriodMs = 333;
-constexpr std::uint32_t kPublishPeriodMs   = 100;
-// the leader must resend commands within this period or all outputs turn off
+constexpr std::uint32_t kPublishPeriodMs = 100;
+// the leader must resend body state within this period or outputs fall back to their safe state
 constexpr std::uint32_t kCommandTimeoutMs = 1000;
+// frames handled per loop pass, the mcp rx fifo depth, so a flooded bus cannot starve the timers
+constexpr int kMaxRxPerPass = 8;
 
 namespace {
-
-// actuator state, driven by bus commands
-struct Outputs {
-    bool turn_left{};
-    bool turn_right{};
-    bool headlights{};
-    bool horn{};
-};
 
 void init_outputs() {
     for (unsigned pin : {kTurnLeft, kTurnRight, kHeadlightL, kHeadlightR, kHorn}) {
@@ -39,40 +32,15 @@ void init_outputs() {
     }
 }
 
-// the steady outputs; turn signals blink on their own timer
-void drive(const Outputs& o) {
-    gpio_put(kHeadlightL, o.headlights);
-    gpio_put(kHeadlightR, o.headlights);
-    gpio_put(kHorn, o.horn);
-}
-
-void all_off(Outputs& o) {
-    o = Outputs{};
-    drive(o);
-    gpio_put(kTurnLeft, false);
-    gpio_put(kTurnRight, false);
-}
-
-void apply_command(Outputs& o, const AuxCommand& c) {
-    const bool on = c.value != 0;
-    switch (c.actuator) {
-        case Actuator::TurnLeft:
-            o.turn_left = on;
-            if (!on) {
-                gpio_put(kTurnLeft, false);
-            }
-            break;
-        case Actuator::TurnRight:
-            o.turn_right = on;
-            if (!on) {
-                gpio_put(kTurnRight, false);
-            }
-            break;
-        case Actuator::Headlights: o.headlights = on; break;
-        case Actuator::Horn: o.horn = on; break;
-        default: return;
-    }
-    drive(o);
+// drive this node's outputs from body state bits
+void apply(std::uint8_t bits) {
+    const bool lit        = (bits & cev::BodyState::kBlinkPhase) != 0;
+    const bool headlights = (bits & cev::BodyState::kHeadlights) != 0;
+    gpio_put(kTurnLeft, lit && (bits & cev::BodyState::kLeftTurn) != 0);
+    gpio_put(kTurnRight, lit && (bits & cev::BodyState::kRightTurn) != 0);
+    gpio_put(kHeadlightL, headlights);
+    gpio_put(kHeadlightR, headlights);
+    gpio_put(kHorn, (bits & cev::BodyState::kHorn) != 0);
 }
 
 }  // namespace
@@ -92,16 +60,15 @@ int main() {
                      .stby = kMcpStby,
                      .nint = kMcpInt}};
 
-    Outputs out{};
+    // body state bits currently applied
+    std::uint8_t body{};
     // a stop latches until reset; todo clear on a ratified resume command
     bool stopped{};
-    bool blink_on{};
-    cev::Interval blink{kBlinkHalfPeriodMs};
     cev::Interval pub{kPublishPeriodMs};
     absolute_time_t command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
 
     while (true) {
-        while (true) {
+        for (int i = 0; i < kMaxRxPerPass; ++i) {
             const auto rx = bus.recv();
             if (rx.status != chuds::RxStatus::Received || !rx.msg) {
                 break;
@@ -109,25 +76,23 @@ int main() {
             const chuds::Message& m = *rx.msg;
             if (m.cls == chuds::MsgClass::Emergency && m.type == chuds::MsgType::Stop) {
                 stopped = true;
-                all_off(out);
-            } else if (!stopped && m.cls == chuds::MsgClass::Command && m.subaddress == kNodeId &&
-                       m.type == chuds::MsgType::Update) {
-                if (auto c = chuds::body_as<AuxCommand>(m)) {
-                    apply_command(out, *c);
+                body &= cev::BodyState::kHeadlights;
+                apply(body);
+            } else if (!stopped && m.cls == chuds::MsgClass::Command &&
+                       m.subaddress == cev::kBodyStateId && m.type == chuds::MsgType::Update) {
+                if (auto s = chuds::body_as<cev::BodyState>(m)) {
+                    body = s->bits;
+                    apply(body);
                     command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
                 }
             }
         }
 
+        // headlights hold, here and on a stop, since going dark is worse than staying lit
         if (time_reached(command_deadline)) {
-            all_off(out);
+            body &= cev::BodyState::kHeadlights;
+            apply(body);
             command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
-        }
-
-        if (blink.due()) {
-            blink_on = !blink_on;
-            gpio_put(kTurnLeft, out.turn_left && blink_on);
-            gpio_put(kTurnRight, out.turn_right && blink_on);
         }
 
         if (pub.due()) {
