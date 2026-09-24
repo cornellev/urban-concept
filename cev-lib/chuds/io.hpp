@@ -41,7 +41,7 @@ template <Transport T>
     if (!m) {
         return {RxStatus::Malformed, std::nullopt};
     }
-    return {RxStatus::Received, std::move(m)};
+    return {RxStatus::Received, *std::move(m)};
 }
 
 }  // namespace chuds
