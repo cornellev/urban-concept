@@ -1,9 +1,9 @@
 #include <cstdint>
 #include <cstdio>
 
+#include "chuds/wire.hpp"
 #include "common/interval.hpp"
 #include "common/mcp_bus.hpp"
-#include "common/wire.hpp"
 #include "config.hpp"
 #include "hardware/adc.h"
 #include "pico/stdlib.h"

@@ -2,10 +2,10 @@
 #include <initializer_list>
 
 #include "chuds/io.hpp"
+#include "chuds/wire.hpp"
 #include "common/interval.hpp"
 #include "common/mcp_bus.hpp"
 #include "common/rpm.hpp"
-#include "common/wire.hpp"
 #include "config.hpp"
 #include "hardware/adc.h"
 #include "hardware/clocks.h"
