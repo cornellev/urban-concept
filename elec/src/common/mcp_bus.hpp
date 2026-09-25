@@ -56,7 +56,7 @@ class McpBus {
     McpBus& operator=(McpBus&&)      = delete;
     ~McpBus()                        = default;
 
-    Mcp251863Transport& transport() { return tx_; }
+    chuds::Mcp251863Transport& transport() { return tx_; }
 
     // whether the controller initialized and no bus fault has been seen since
     [[nodiscard]] bool ok() const { return ok_; }
@@ -96,7 +96,7 @@ class McpBus {
     MCP251863 mcp_;
     // latched so a persistent fault prints once, not every loop
     bool ok_{};
-    Mcp251863Transport tx_{mcp_};
+    chuds::Mcp251863Transport tx_{mcp_};
 };
 
 }  // namespace cev

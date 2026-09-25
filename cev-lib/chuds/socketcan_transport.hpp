@@ -20,9 +20,9 @@
 #include <expected>
 #include <string_view>
 
-namespace cev {
+namespace chuds {
 
-// a chuds::Transport over a Linux SocketCAN raw CAN-FD socket
+// a Transport over a Linux SocketCAN raw CAN-FD socket
 // non-blocking: recv reports Empty on a quiet bus, BusOff on a dead one
 // bus-off holds from the bus-off error frame until a restart or any received frame
 class SocketCanTransport {
@@ -127,19 +127,19 @@ class SocketCanTransport {
         return ::poll(&p, 1, static_cast<int>(timeout.count())) > 0;
     }
 
-    [[nodiscard]] chuds::TxResult send(const chuds::CanFrame& f) {
+    [[nodiscard]] TxResult send(const CanFrame& f) {
         if (fd_ < 0) {
-            return std::unexpected(chuds::TxError::Error);
+            return std::unexpected(TxError::Error);
         }
 
         // reject a malformed frame before it corrupts memory or aliases an id
         // an out-of-range id would mask down to a valid one on the wire
-        if (!f.id.is_standard() || !chuds::is_valid_fd_len(f.len)) {
-            return std::unexpected(chuds::TxError::Error);
+        if (!f.id.is_standard() || !is_valid_fd_len(f.len)) {
+            return std::unexpected(TxError::Error);
         }
 
         if (bus_off_) {
-            return std::unexpected(chuds::TxError::BusOff);
+            return std::unexpected(TxError::BusOff);
         }
 
         canfd_frame cf{};
@@ -154,14 +154,14 @@ class SocketCanTransport {
             return {};
         }
         if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == ENOBUFS)) {
-            return std::unexpected(chuds::TxError::QueueFull);
+            return std::unexpected(TxError::QueueFull);
         }
-        return std::unexpected(chuds::TxError::Error);
+        return std::unexpected(TxError::Error);
     }
 
-    [[nodiscard]] chuds::RxResult recv() {
+    [[nodiscard]] RxResult recv() {
         if (fd_ < 0) {
-            return std::unexpected(chuds::RxError::Error);
+            return std::unexpected(RxError::Error);
         }
 
         canfd_frame cf{};
@@ -169,11 +169,11 @@ class SocketCanTransport {
         if (n < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 if (bus_off_) {
-                    return std::unexpected(chuds::RxError::BusOff);
+                    return std::unexpected(RxError::BusOff);
                 }
-                return std::unexpected(chuds::RxError::Empty);
+                return std::unexpected(RxError::Empty);
             }
-            return std::unexpected(chuds::RxError::Error);
+            return std::unexpected(RxError::Error);
         }
 
         // an error frame reports bus state, not data
@@ -181,9 +181,9 @@ class SocketCanTransport {
         if ((cf.can_id & CAN_ERR_FLAG) != 0) {
             bus_off_ = (cf.can_id & CAN_ERR_BUSOFF) != 0;
             if (bus_off_) {
-                return std::unexpected(chuds::RxError::BusOff);
+                return std::unexpected(RxError::BusOff);
             }
-            return std::unexpected(chuds::RxError::Empty);
+            return std::unexpected(RxError::Empty);
         }
 
         // a bus-off controller receives nothing, so any frame means the bus is back
@@ -192,22 +192,22 @@ class SocketCanTransport {
         // a 16-byte read is a classic CAN frame
         // chuds is CAN-FD only, so reject it
         if (n != static_cast<ssize_t>(sizeof(cf))) {
-            return std::unexpected(chuds::RxError::ForeignFrame);
+            return std::unexpected(RxError::ForeignFrame);
         }
 
         // chuds is standard-id CAN-FD only
         // reject remote and extended frames rather than forging a standard id
         if ((cf.can_id & (CAN_RTR_FLAG | CAN_EFF_FLAG)) != 0) {
-            return std::unexpected(chuds::RxError::ForeignFrame);
+            return std::unexpected(RxError::ForeignFrame);
         }
         // a standard frame carries no stray bits above the 11-bit id
         if ((cf.can_id & CAN_EFF_MASK) > CAN_SFF_MASK) {
-            return std::unexpected(chuds::RxError::ForeignFrame);
+            return std::unexpected(RxError::ForeignFrame);
         }
 
-        chuds::CanFrame out{};
-        out.id  = chuds::CanId::from_raw(static_cast<std::uint16_t>(cf.can_id & CAN_SFF_MASK));
-        out.len = cf.len > chuds::kMaxFdPayload ? chuds::kMaxFdPayload : cf.len;
+        CanFrame out{};
+        out.id  = CanId::from_raw(static_cast<std::uint16_t>(cf.can_id & CAN_SFF_MASK));
+        out.len = cf.len > kMaxFdPayload ? kMaxFdPayload : cf.len;
         std::copy_n(cf.data, out.len, out.data.data());
         return out;
     }
@@ -224,8 +224,8 @@ class SocketCanTransport {
     bool bus_off_{false};
 };
 
-static_assert(chuds::Transport<SocketCanTransport>);
+static_assert(Transport<SocketCanTransport>);
 
-}  // namespace cev
+}  // namespace chuds
 
 #endif  // __linux__

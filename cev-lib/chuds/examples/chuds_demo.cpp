@@ -3,18 +3,15 @@
 #include <string_view>
 #include <utility>
 
-#include "chuds/io.hpp"
-#include "chuds/message.hpp"
+#include "chuds/chuds.hpp"
 #include "chuds/socketcan_transport.hpp"
-#include "chuds/wire.hpp"
-#include "chuds/wire_format.hpp"
 
 namespace {
 
 // send a body state with headlights on
-int run_send(cev::SocketCanTransport& t) {
-    const cev::BodyState state{cev::BodyState::kHeadlights};
-    const auto msg = chuds::make_message(chuds::MsgClass::Command, cev::kBodyStateId,
+int run_send(chuds::SocketCanTransport& t) {
+    const chuds::BodyState state{chuds::BodyState::kHeadlights};
+    const auto msg = chuds::make_message(chuds::MsgClass::Command, chuds::kBodyStateId,
                                          chuds::MsgType::Update, state);
     if (!msg) {
         std::fprintf(stderr, "error\n");
@@ -30,12 +27,12 @@ int run_send(cev::SocketCanTransport& t) {
 }
 
 // print the first message that arrives
-int run_recv(cev::SocketCanTransport& t, std::string_view ifname) {
+int run_recv(chuds::SocketCanTransport& t, std::string_view ifname) {
     std::printf("listening on %.*s\n", static_cast<int>(ifname.size()), ifname.data());
     while (t.wait(std::chrono::seconds{5})) {
         const auto r = chuds::recv(t);
         if (r) {
-            cev::print_message(*r);
+            chuds::print_message(*r);
             return 0;
         }
         // a dead bus or driver is fatal, a foreign or malformed frame is not
@@ -59,7 +56,7 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-    cev::SocketCanTransport t;
+    chuds::SocketCanTransport t;
     if (!t.open(ifname)) {
         std::fprintf(stderr, "failed to open %.*s\n", static_cast<int>(ifname.size()),
                      ifname.data());

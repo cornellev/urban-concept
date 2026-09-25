@@ -1,14 +1,14 @@
 #include <cstdint>
 #include <cstdio>
 
-#include "chuds/wire.hpp"
+#include "chuds/chuds.hpp"
 #include "common/interval.hpp"
 #include "common/mcp_bus.hpp"
 #include "config.hpp"
 #include "hardware/adc.h"
 #include "pico/stdlib.h"
 
-using namespace cev::joulemeter;
+using namespace chuds::joulemeter;
 
 namespace {
 

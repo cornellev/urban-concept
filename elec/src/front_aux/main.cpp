@@ -1,8 +1,7 @@
 #include <cstdint>
 #include <initializer_list>
 
-#include "chuds/io.hpp"
-#include "chuds/wire.hpp"
+#include "chuds/chuds.hpp"
 #include "common/interval.hpp"
 #include "common/mcp_bus.hpp"
 #include "common/rpm.hpp"
@@ -10,7 +9,7 @@
 #include "hardware/adc.h"
 #include "pico/stdlib.h"
 
-using namespace cev::front_aux;
+using namespace chuds::front_aux;
 
 // steering sensor adc channel, derived from its gpio
 static_assert(kSteeringAdc >= 26 && kSteeringAdc <= 29);
@@ -34,13 +33,13 @@ void init_outputs() {
 
 // drive this node's outputs from body state bits
 void apply(std::uint8_t bits) {
-    const bool lit        = (bits & cev::BodyState::kBlinkPhase) != 0;
-    const bool headlights = (bits & cev::BodyState::kHeadlights) != 0;
-    gpio_put(kTurnLeft, lit && (bits & cev::BodyState::kLeftTurn) != 0);
-    gpio_put(kTurnRight, lit && (bits & cev::BodyState::kRightTurn) != 0);
+    const bool lit        = (bits & chuds::BodyState::kBlinkPhase) != 0;
+    const bool headlights = (bits & chuds::BodyState::kHeadlights) != 0;
+    gpio_put(kTurnLeft, lit && (bits & chuds::BodyState::kLeftTurn) != 0);
+    gpio_put(kTurnRight, lit && (bits & chuds::BodyState::kRightTurn) != 0);
     gpio_put(kHeadlightL, headlights);
     gpio_put(kHeadlightR, headlights);
-    gpio_put(kHorn, (bits & cev::BodyState::kHorn) != 0);
+    gpio_put(kHorn, (bits & chuds::BodyState::kHorn) != 0);
 }
 
 }  // namespace
@@ -76,11 +75,11 @@ int main() {
             const chuds::Message& m = *rx;
             if (m.cls == chuds::MsgClass::Emergency && m.type == chuds::MsgType::Stop) {
                 stopped = true;
-                body &= cev::BodyState::kHeadlights;
+                body &= chuds::BodyState::kHeadlights;
                 apply(body);
             } else if (!stopped && m.cls == chuds::MsgClass::Command &&
-                       m.subaddress == cev::kBodyStateId && m.type == chuds::MsgType::Update) {
-                if (auto s = chuds::body_as<cev::BodyState>(m)) {
+                       m.subaddress == chuds::kBodyStateId && m.type == chuds::MsgType::Update) {
+                if (auto s = chuds::body_as<chuds::BodyState>(m)) {
                     body = s->bits;
                     apply(body);
                     command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
@@ -90,7 +89,7 @@ int main() {
 
         // headlights hold, here and on a stop, since going dark is worse than staying lit
         if (time_reached(command_deadline)) {
-            body &= cev::BodyState::kHeadlights;
+            body &= chuds::BodyState::kHeadlights;
             apply(body);
             command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
         }

@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace cev {
+namespace chuds {
 
 // command subaddress of the leader's broadcast body state, can id 0x108
 constexpr std::uint8_t kBodyStateId = 0x08;
@@ -24,9 +24,9 @@ struct BodyState {
 };
 static_assert(sizeof(BodyState) == 1);
 
-}  // namespace cev
+}  // namespace chuds
 
-namespace cev::front_aux {
+namespace chuds::front_aux {
 
 // this node's id: telemetry source
 constexpr std::uint8_t kNodeId = 0x10;
@@ -40,9 +40,9 @@ struct Telemetry {
 };
 static_assert(sizeof(Telemetry) == 6);
 
-}  // namespace cev::front_aux
+}  // namespace chuds::front_aux
 
-namespace cev::back_aux {
+namespace chuds::back_aux {
 
 // this node's id: telemetry source
 constexpr std::uint8_t kNodeId = 0x20;
@@ -56,9 +56,9 @@ struct Telemetry {
 };
 static_assert(sizeof(Telemetry) == 6);
 
-}  // namespace cev::back_aux
+}  // namespace chuds::back_aux
 
-namespace cev::joulemeter {
+namespace chuds::joulemeter {
 
 // this node's id: telemetry source
 constexpr std::uint8_t kNodeId = 0x30;
@@ -73,4 +73,4 @@ struct Telemetry {
 };
 static_assert(sizeof(Telemetry) == 16);
 
-}  // namespace cev::joulemeter
+}  // namespace chuds::joulemeter

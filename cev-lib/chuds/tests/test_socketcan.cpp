@@ -44,7 +44,7 @@ bool skip_without_can(bool opened) {
 }
 
 // wait for a frame or bus event, then receive it
-RxResult recv_wait(cev::SocketCanTransport& t) {
+RxResult recv_wait(SocketCanTransport& t) {
     if (!t.wait(std::chrono::seconds{1})) {
         return std::unexpected(RxError::Empty);
     }
@@ -52,7 +52,7 @@ RxResult recv_wait(cev::SocketCanTransport& t) {
 }
 
 // receive n frames and count how many were foreign
-int count_foreign(cev::SocketCanTransport& t, int n) {
+int count_foreign(SocketCanTransport& t, int n) {
     int count = 0;
     for (int i = 0; i < n; ++i) {
         const auto r = recv_wait(t);
@@ -102,10 +102,10 @@ ssize_t read_raw(int s, canfd_frame& cf) {
 }
 }  // namespace
 
-static_assert(Transport<cev::SocketCanTransport>);
+static_assert(Transport<SocketCanTransport>);
 
 TEST_CASE("a default transport is closed and reports errors, not silence") {
-    cev::SocketCanTransport t;
+    SocketCanTransport t;
     CHECK_FALSE(t.is_open());
     CHECK_FALSE(t.wait(std::chrono::milliseconds{0}));
     CanFrame f{};
@@ -120,14 +120,14 @@ TEST_CASE("a default transport is closed and reports errors, not silence") {
 }
 
 TEST_CASE("opening a nonexistent interface fails") {
-    cev::SocketCanTransport t;
+    SocketCanTransport t;
     CHECK_FALSE(t.open("nosuchcan0"));
     CHECK_FALSE(t.is_open());
 }
 
 TEST_CASE("round-trips a chuds message over a CAN-FD interface") {
-    cev::SocketCanTransport tx;
-    cev::SocketCanTransport rx;
+    SocketCanTransport tx;
+    SocketCanTransport rx;
     if (skip_without_can(rx.open(test_if()) && tx.open(test_if()))) {
         return;
     }
@@ -150,7 +150,7 @@ TEST_CASE("round-trips a chuds message over a CAN-FD interface") {
 }
 
 TEST_CASE("recv reports empty on a quiet bus") {
-    cev::SocketCanTransport rx;
+    SocketCanTransport rx;
     if (skip_without_can(rx.open(test_if()))) {
         return;
     }
@@ -158,8 +158,8 @@ TEST_CASE("recv reports empty on a quiet bus") {
 }
 
 TEST_CASE("wait times out on a quiet bus and wakes when a frame arrives") {
-    cev::SocketCanTransport tx;
-    cev::SocketCanTransport rx;
+    SocketCanTransport tx;
+    SocketCanTransport rx;
     if (skip_without_can(rx.open(test_if()) && tx.open(test_if()))) {
         return;
     }
@@ -174,7 +174,7 @@ TEST_CASE("wait times out on a quiet bus and wakes when a frame arrives") {
 }
 
 TEST_CASE("send rejects a malformed frame before it reaches the wire") {
-    cev::SocketCanTransport tx;
+    SocketCanTransport tx;
     if (skip_without_can(tx.open(test_if()))) {
         return;
     }
@@ -193,7 +193,7 @@ TEST_CASE("send rejects a malformed frame before it reaches the wire") {
 }
 
 TEST_CASE("recv rejects foreign frames instead of forging a standard id") {
-    cev::SocketCanTransport rx;
+    SocketCanTransport rx;
     if (skip_without_can(rx.open(test_if()))) {
         return;
     }
@@ -218,7 +218,7 @@ TEST_CASE("recv rejects foreign frames instead of forging a standard id") {
 }
 
 TEST_CASE("recv rejects remote frames and ids past the standard range") {
-    cev::SocketCanTransport rx;
+    SocketCanTransport rx;
     if (skip_without_can(rx.open(test_if()))) {
         return;
     }
@@ -239,7 +239,7 @@ TEST_CASE("recv rejects remote frames and ids past the standard range") {
 }
 
 TEST_CASE("send puts the exact id, BRS flag, length, and bytes on the wire") {
-    cev::SocketCanTransport tx;
+    SocketCanTransport tx;
     if (skip_without_can(tx.open(test_if()))) {
         return;
     }
@@ -266,7 +266,7 @@ TEST_CASE("send puts the exact id, BRS flag, length, and bytes on the wire") {
 }
 
 TEST_CASE("a bus-off error frame holds BusOff until a restart") {
-    cev::SocketCanTransport t;
+    SocketCanTransport t;
     if (skip_without_can(t.open(test_if()))) {
         return;
     }

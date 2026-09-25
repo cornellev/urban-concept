@@ -5,8 +5,8 @@
 #include <string_view>
 #include <utility>
 
+#include "chuds/catalog.hpp"
 #include "chuds/message.hpp"
-#include "chuds/wire.hpp"
 
 using namespace chuds;
 
@@ -272,9 +272,8 @@ TEST_CASE("struct make_message and body_as are constexpr") {
 }
 
 TEST_CASE("body state goes out as a 3-byte broadcast command on 0x108") {
-    const cev::BodyState s{
-        static_cast<std::uint8_t>(cev::BodyState::kHeadlights | cev::BodyState::kLeftTurn)};
-    const auto m = make_message(MsgClass::Command, cev::kBodyStateId, MsgType::Update, s);
+    const BodyState s{static_cast<std::uint8_t>(BodyState::kHeadlights | BodyState::kLeftTurn)};
+    const auto m = make_message(MsgClass::Command, kBodyStateId, MsgType::Update, s);
     REQUIRE(m.has_value());
     const auto f = encode(*m);
     REQUIRE(f.has_value());

@@ -7,7 +7,7 @@
 #include "chuds/transport.hpp"
 #include "mcp251863.h"
 
-namespace cev {
+namespace chuds {
 
 // whether a driver timing preset runs at this bitrate and sample point on the 40 MHz clock
 constexpr bool timing_matches(const BitTiming& t, std::uint32_t bitrate,
@@ -18,11 +18,10 @@ constexpr bool timing_matches(const BitTiming& t, std::uint32_t bitrate,
 }
 
 // McpBus applies these presets through init(), so they must match the chuds bus
-static_assert(timing_matches(kBitTiming500K40MHz, chuds::kNominalBitrate,
-                             chuds::kNominalSamplePoint));
-static_assert(timing_matches(kBitTiming2M40MHz, chuds::kDataBitrate, chuds::kDataSamplePoint));
+static_assert(timing_matches(kBitTiming500K40MHz, kNominalBitrate, kNominalSamplePoint));
+static_assert(timing_matches(kBitTiming2M40MHz, kDataBitrate, kDataSamplePoint));
 
-// a chuds::Transport over the MCP251863 CAN-FD controller
+// a Transport over the MCP251863 CAN-FD controller
 class Mcp251863Transport {
    public:
     // explicit constructor, taking in the controller by reference
@@ -37,9 +36,9 @@ class Mcp251863Transport {
     Mcp251863Transport& operator=(Mcp251863Transport&&)      = delete;
     ~Mcp251863Transport()                                    = default;
 
-    [[nodiscard]] chuds::TxResult send(const chuds::CanFrame& f) {
-        if (!f.id.is_standard() || !chuds::is_valid_fd_len(f.len)) {
-            return std::unexpected(chuds::TxError::Error);
+    [[nodiscard]] TxResult send(const CanFrame& f) {
+        if (!f.id.is_standard() || !is_valid_fd_len(f.len)) {
+            return std::unexpected(TxError::Error);
         }
 
         // chuds frames are CAN-FD with bit-rate switch and a standard id
@@ -49,39 +48,39 @@ class Mcp251863Transport {
 
         // a bus-off keeps the tx queue full, so rule it out first
         if (mcp_.getStatus().bus_off) {
-            return std::unexpected(chuds::TxError::BusOff);
+            return std::unexpected(TxError::BusOff);
         }
 
         // the frame was prevalidated, so the only failure left is a full tx fifo
-        return std::unexpected(chuds::TxError::QueueFull);
+        return std::unexpected(TxError::QueueFull);
     }
 
-    [[nodiscard]] chuds::RxResult recv() {
+    [[nodiscard]] RxResult recv() {
         CanFdFrame cf = mcp_.read_canfd();
         if (!cf.valid) {
             // a dead bus is a fault, not a quiet one
             if (mcp_.getStatus().bus_off) {
-                return std::unexpected(chuds::RxError::BusOff);
+                return std::unexpected(RxError::BusOff);
             }
 
             if (mcp_.getFIFOStatus(mcp_.getRxFifoNum()).rx_overflow) {
                 // the flag is sticky and holds nINT low, so clear it once reported
                 mcp_.clearRxOverflow();
-                return std::unexpected(chuds::RxError::Overflow);
+                return std::unexpected(RxError::Overflow);
             }
 
-            return std::unexpected(chuds::RxError::Empty);
+            return std::unexpected(RxError::Empty);
         }
 
         // chuds is standard 11-bit CAN-FD only
         // reject classic, remote, extended, out-of-range
-        if (cf.ide || cf.rtr || !cf.fdf || cf.id > chuds::kMaxStandardId.raw()) {
-            return std::unexpected(chuds::RxError::ForeignFrame);
+        if (cf.ide || cf.rtr || !cf.fdf || cf.id > kMaxStandardId.raw()) {
+            return std::unexpected(RxError::ForeignFrame);
         }
 
-        chuds::CanFrame out{};
-        out.id  = chuds::CanId::from_raw(static_cast<std::uint16_t>(cf.id));
-        out.len = cf.len > chuds::kMaxFdPayload ? chuds::kMaxFdPayload : cf.len;
+        CanFrame out{};
+        out.id  = CanId::from_raw(static_cast<std::uint16_t>(cf.id));
+        out.len = cf.len > kMaxFdPayload ? kMaxFdPayload : cf.len;
         std::copy_n(cf.data, out.len, out.data.data());
 
         return out;
@@ -91,7 +90,7 @@ class Mcp251863Transport {
     MCP251863& mcp_;
 };
 
-// assert that this meets the requirement of a chuds::Transport
-static_assert(chuds::Transport<Mcp251863Transport>);
+// assert that this meets the requirement of a Transport
+static_assert(Transport<Mcp251863Transport>);
 
-}  // namespace cev
+}  // namespace chuds
