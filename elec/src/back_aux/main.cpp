@@ -125,12 +125,15 @@ int main() {
     adc_init();
     adc_gpio_init(kBrakeAdc);
 
-    chuds::Bus<chuds::Mcp251863Transport> bus{chuds::Mcp251863Transport{{.sck  = kSpiSck,
-                                                                         .mosi = kSpiMosi,
-                                                                         .miso = kSpiMiso,
-                                                                         .cs   = kMcpCs,
-                                                                         .stby = kMcpStby,
-                                                                         .nint = kMcpInt}}};
+    chuds::Bus<chuds::Mcp251863Transport> bus{chuds::Mcp251863Transport{{
+        .sck  = kSpiSck,
+        .mosi = kSpiMosi,
+        .miso = kSpiMiso,
+        .cs   = kMcpCs,
+        .stby = kMcpStby,
+        .nint = kMcpInt,
+    }}};
+
     if (!bus.ready()) {
         std::printf("can init failed\n");
     }
