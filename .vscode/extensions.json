@@ -1,0 +1,4 @@
+{
+  // install the clangd extension instead of the microsoft c/c++ extension
+  "recommendations": ["llvm-vs-code-extensions.vscode-clangd"]
+}

@@ -1,0 +1,6 @@
+{
+  // ensure the arm toolchain is used
+  "clangd.arguments": ["--query-driver=**/arm-none-eabi-*"],
+  // disable vscode intellisense because we use the clangd extension
+  "C_Cpp.intelliSenseEngine": "disabled"
+}
