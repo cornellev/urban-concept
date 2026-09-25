@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <expected>
 
 #include "chuds/io.hpp"
 #include "chuds/mcp_transport.hpp"
@@ -62,13 +63,13 @@ class McpBus {
 
     // receive the next message, printing the first rx fault
     // nINT stays high while no frame or overflow is pending, so that skips the spi reads
-    [[nodiscard]] chuds::RxMessage recv() {
+    [[nodiscard]] chuds::RecvResult recv() {
         if (gpio_get(nint_)) {
-            return {chuds::RxStatus::Empty, {}};
+            return std::unexpected(chuds::RxError::Empty);
         }
         auto rx = chuds::recv(tx_);
-        if (ok_ &&
-            (rx.status == chuds::RxStatus::BusOff || rx.status == chuds::RxStatus::Overflow)) {
+        if (ok_ && !rx &&
+            (rx.error() == chuds::RxError::BusOff || rx.error() == chuds::RxError::Overflow)) {
             std::printf("can rx fault\n");
             ok_ = false;
         }
@@ -80,8 +81,10 @@ class McpBus {
     void publish(std::uint8_t node, const Body& body) {
         const auto m =
             chuds::make_message(chuds::MsgClass::Telemetry, node, chuds::MsgType::Update, body);
-        const chuds::TxStatus st = m ? chuds::send(tx_, *m) : chuds::TxStatus::Error;
-        if (ok_ && (st == chuds::TxStatus::BusOff || st == chuds::TxStatus::Error)) {
+        const chuds::TxResult st =
+            m ? chuds::send(tx_, *m) : chuds::TxResult{std::unexpected(chuds::TxError::Error)};
+        if (ok_ && !st &&
+            (st.error() == chuds::TxError::BusOff || st.error() == chuds::TxError::Error)) {
             std::printf("can tx fault\n");
             ok_ = false;
         }

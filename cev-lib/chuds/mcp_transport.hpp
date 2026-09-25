@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <expected>
 
 #include "chuds/transport.hpp"
 #include "mcp251863.h"
@@ -36,23 +37,23 @@ class Mcp251863Transport {
     Mcp251863Transport& operator=(Mcp251863Transport&&)      = delete;
     ~Mcp251863Transport()                                    = default;
 
-    [[nodiscard]] chuds::TxStatus send(const chuds::CanFrame& f) {
+    [[nodiscard]] chuds::TxResult send(const chuds::CanFrame& f) {
         if (!f.id.is_standard() || !chuds::is_valid_fd_len(f.len)) {
-            return chuds::TxStatus::Error;
+            return std::unexpected(chuds::TxError::Error);
         }
 
         // chuds frames are CAN-FD with bit-rate switch and a standard id
         if (mcp_.send_canfd(f.id.raw(), f.data.data(), f.len, true, false) == 1) {
-            return chuds::TxStatus::Queued;
+            return {};
         }
 
         // a bus-off keeps the tx queue full, so rule it out first
         if (mcp_.getStatus().bus_off) {
-            return chuds::TxStatus::BusOff;
+            return std::unexpected(chuds::TxError::BusOff);
         }
 
         // the frame was prevalidated, so the only failure left is a full tx fifo
-        return chuds::TxStatus::QueueFull;
+        return std::unexpected(chuds::TxError::QueueFull);
     }
 
     [[nodiscard]] chuds::RxResult recv() {
@@ -60,22 +61,22 @@ class Mcp251863Transport {
         if (!cf.valid) {
             // a dead bus is a fault, not a quiet one
             if (mcp_.getStatus().bus_off) {
-                return {chuds::RxStatus::BusOff, {}};
+                return std::unexpected(chuds::RxError::BusOff);
             }
 
             if (mcp_.getFIFOStatus(mcp_.getRxFifoNum()).rx_overflow) {
                 // the flag is sticky and holds nINT low, so clear it once reported
                 mcp_.clearRxOverflow();
-                return {chuds::RxStatus::Overflow, {}};
+                return std::unexpected(chuds::RxError::Overflow);
             }
 
-            return {chuds::RxStatus::Empty, {}};
+            return std::unexpected(chuds::RxError::Empty);
         }
 
         // chuds is standard 11-bit CAN-FD only
         // reject classic, remote, extended, out-of-range
         if (cf.ide || cf.rtr || !cf.fdf || cf.id > chuds::kMaxStandardId.raw()) {
-            return {chuds::RxStatus::Malformed, {}};
+            return std::unexpected(chuds::RxError::ForeignFrame);
         }
 
         chuds::CanFrame out{};
@@ -83,7 +84,7 @@ class Mcp251863Transport {
         out.len = cf.len > chuds::kMaxFdPayload ? chuds::kMaxFdPayload : cf.len;
         std::copy_n(cf.data, out.len, out.data.data());
 
-        return {chuds::RxStatus::Received, out};
+        return out;
     }
 
    private:

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <optional>
+#include <expected>
 #include <utility>
 
 #include "chuds/message.hpp"
@@ -8,40 +8,47 @@
 
 namespace chuds {
 
-// a received Message plus the transport status it arrived with
 // mirrors RxResult one level up
-// msg is set only when status is Received
-struct RxMessage {
-    RxStatus status{RxStatus::Empty};
-    std::optional<Message> msg{};
-};
+using RecvResult = std::expected<Message, RxError>;
+
+// the RxError that reports a decode failure
+// no default case, so -Wswitch flags a DecodeError added without a mapping
+[[nodiscard]] constexpr RxError to_rx_error(DecodeError e) {
+    switch (e) {
+        case DecodeError::NonStandardId: return RxError::NonStandardId;
+        case DecodeError::UnknownClass: return RxError::UnknownClass;
+        case DecodeError::BadLength: return RxError::BadLength;
+        case DecodeError::UnknownType: return RxError::UnknownType;
+        case DecodeError::BodyOverrun: return RxError::BodyOverrun;
+    }
+    return RxError::Error;
+}
 
 // send a Message over any Transport
 // encodes internally so callers never build a CanFrame
 // Error if the message cannot be encoded
 template <Transport T>
-[[nodiscard]] TxStatus send(T& t, const Message& m) {
+[[nodiscard]] TxResult send(T& t, const Message& m) {
     const auto f = encode(m);
     if (!f) {
-        return TxStatus::Error;
+        return std::unexpected(TxError::Error);
     }
     return t.send(*f);
 }
 
 // receive the next Message from any Transport, decoding internally
-// status carries the bus state
-// a frame that arrives but fails to decode is Malformed, not Received
+// a frame that arrives but fails to decode reports why as its RxError
 template <Transport T>
-[[nodiscard]] RxMessage recv(T& t) {
+[[nodiscard]] RecvResult recv(T& t) {
     const auto r = t.recv();
-    if (r.status != RxStatus::Received) {
-        return {r.status, std::nullopt};
+    if (!r) {
+        return std::unexpected(r.error());
     }
-    auto m = decode(r.frame);
+    auto m = decode(*r);
     if (!m) {
-        return {RxStatus::Malformed, std::nullopt};
+        return std::unexpected(to_rx_error(m.error()));
     }
-    return {RxStatus::Received, *std::move(m)};
+    return *std::move(m);
 }
 
 }  // namespace chuds

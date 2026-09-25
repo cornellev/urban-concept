@@ -1,65 +1,48 @@
 #include <chrono>
-#include <cstdint>
 #include <cstdio>
 #include <string_view>
-#include <thread>
+#include <utility>
 
 #include "chuds/io.hpp"
 #include "chuds/message.hpp"
 #include "chuds/socketcan_transport.hpp"
-
-using namespace chuds;
+#include "chuds/wire.hpp"
+#include "chuds/wire_format.hpp"
 
 namespace {
 
-// a telemetry body: wheel speed in rpm
-struct WheelSpeed {
-    std::uint16_t rpm;
-    static constexpr bool chuds_wire_body = true;
-};
-static_assert(sizeof(WheelSpeed) == 2);
-
-constexpr std::uint8_t kWheelSensorId = 0x10;
-
+// send a body state with headlights on
 int run_send(cev::SocketCanTransport& t) {
-    std::uint16_t fake_rpm{12345};
-    const auto msg =
-        make_message(MsgClass::Telemetry, kWheelSensorId, MsgType::Update, WheelSpeed{fake_rpm});
+    const cev::BodyState state{cev::BodyState::kHeadlights};
+    const auto msg = chuds::make_message(chuds::MsgClass::Command, cev::kBodyStateId,
+                                         chuds::MsgType::Update, state);
     if (!msg) {
         std::fprintf(stderr, "error\n");
         return 1;
     }
     const auto st = chuds::send(t, *msg);
-    std::printf("sent wheel speed %u. status: %d\n", static_cast<unsigned>(fake_rpm),
-                static_cast<int>(st));
-    return st == TxStatus::Queued ? 0 : 1;
+    if (!st) {
+        std::fprintf(stderr, "send failed: %d\n", std::to_underlying(st.error()));
+        return 1;
+    }
+    std::printf("sent body state 0x%02x\n", state.bits);
+    return 0;
 }
 
+// print the first message that arrives
 int run_recv(cev::SocketCanTransport& t, std::string_view ifname) {
     std::printf("listening on %.*s\n", static_cast<int>(ifname.size()), ifname.data());
-    for (int i = 0; i < 500; ++i) {
+    while (t.wait(std::chrono::seconds{5})) {
         const auto r = chuds::recv(t);
-        if (r.status == RxStatus::BusOff) {
-            std::fprintf(stderr, "bus off\n");
-            return 1;
-        }
-        if (r.status == RxStatus::Error) {
-            std::fprintf(stderr, "recv error\n");
-            return 1;
-        }
-        if (r.msg) {
-            if (const auto w = body_as<WheelSpeed>(*r.msg)) {
-                std::printf("recv wheel speed: %urpm from sensor 0x%02x\n",
-                            static_cast<unsigned>(w->rpm),
-                            static_cast<unsigned>(r.msg->subaddress));
-            } else {
-                std::printf("recv message type %d (not wheel speed)\n",
-                            static_cast<int>(r.msg->type));
-            }
+        if (r) {
+            cev::print_message(*r);
             return 0;
         }
-        // a foreign or malformed frame is not our fault; keep listening
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        // a dead bus or driver is fatal, a foreign or malformed frame is not
+        if (r.error() == chuds::RxError::BusOff || r.error() == chuds::RxError::Error) {
+            std::fprintf(stderr, "recv failed: %d\n", std::to_underlying(r.error()));
+            return 1;
+        }
     }
     std::fprintf(stderr, "timeout, nothing received\n");
     return 1;

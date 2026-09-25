@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include <expected>
 #include <optional>
 
 #include "chuds/frame.hpp"
@@ -11,17 +12,17 @@ namespace {
 // a loopback transport: send stores one frame, recv hands it back once
 struct Loopback {
     std::optional<CanFrame> pending;
-    TxStatus send(const CanFrame& f) {
+    TxResult send(const CanFrame& f) {
         pending = f;
-        return TxStatus::Queued;
+        return {};
     }
     RxResult recv() {
         if (!pending) {
-            return RxResult{RxStatus::Empty, {}};
+            return std::unexpected(RxError::Empty);
         }
-        RxResult r{RxStatus::Received, *pending};
+        const CanFrame f = *pending;
         pending.reset();
-        return r;
+        return f;
     }
 };
 
@@ -37,9 +38,11 @@ TEST_CASE("a transport moves a frame through the seam") {
     f.id  = CanId::from_raw(0x123);
     f.len = 2;
 
-    CHECK(t.send(f) == TxStatus::Queued);
+    CHECK(t.send(f).has_value());
     const auto got = t.recv();
-    REQUIRE(got.status == RxStatus::Received);
-    CHECK(got.frame.id.raw() == 0x123);
-    CHECK(t.recv().status == RxStatus::Empty);  // consumed
+    REQUIRE(got.has_value());
+    CHECK(got->id.raw() == 0x123);
+
+    // consumed, so the next recv is Empty
+    CHECK(t.recv() == std::unexpected(RxError::Empty));
 }

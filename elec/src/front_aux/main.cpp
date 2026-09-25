@@ -70,10 +70,10 @@ int main() {
     while (true) {
         for (int i = 0; i < kMaxRxPerPass; ++i) {
             const auto rx = bus.recv();
-            if (rx.status != chuds::RxStatus::Received || !rx.msg) {
+            if (!rx) {
                 break;
             }
-            const chuds::Message& m = *rx.msg;
+            const chuds::Message& m = *rx;
             if (m.cls == chuds::MsgClass::Emergency && m.type == chuds::MsgType::Stop) {
                 stopped = true;
                 body &= cev::BodyState::kHeadlights;

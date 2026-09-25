@@ -2,50 +2,52 @@
 
 #include <concepts>
 #include <cstdint>
+#include <expected>
 
 #include "chuds/frame.hpp"
 
 namespace chuds {
 
-// outcome of a send
-enum class TxStatus : std::uint8_t {
-    // queued, not yet on the wire
-    Queued,
+// why a send failed
+enum class TxError : std::uint8_t {
     // tx queue full, retry later
     QueueFull,
     // controller is bus-off
     BusOff,
-    // send failed, bad frame or driver fault
+    // bad frame or driver fault
     Error,
 };
 
-// outcome of a recv
-// the frame is valid only when status is Received
-enum class RxStatus : std::uint8_t {
-    // a valid frame arrived
-    Received,
-    // nothing pending, not a fault
+// why a recv returned no frame
+enum class RxError : std::uint8_t {
+    // nothing waiting, not a fault
     Empty,
     // rx queue overflowed, frames dropped
     Overflow,
-    // non-chuds frame arrived, keep listening
-    Malformed,
     // bus is off, a fault not silence
     BusOff,
-    // recv failed, driver fault or closed transport
+    // driver fault or closed transport
     Error,
+    // a classic, remote, extended, or out-of-range frame, never a chuds frame
+    ForeignFrame,
+    // the frame arrived but did not decode, reported only by chuds::recv
+    NonStandardId,
+    UnknownClass,
+    BadLength,
+    UnknownType,
+    BodyOverrun,
 };
 
-struct RxResult {
-    RxStatus status{RxStatus::Empty};
-    CanFrame frame{};
-};
+// success means queued, not yet on the wire
+using TxResult = std::expected<void, TxError>;
+
+using RxResult = std::expected<CanFrame, RxError>;
 
 // the seam between chuds and a driver
 // send and recv report explicit outcomes so a dead bus is not mistaken for quiet
 template <typename T>
 concept Transport = requires(T t, const CanFrame& f) {
-    { t.send(f) } -> std::same_as<TxStatus>;
+    { t.send(f) } -> std::same_as<TxResult>;
     { t.recv() } -> std::same_as<RxResult>;
 };
 

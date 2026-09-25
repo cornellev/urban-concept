@@ -12,6 +12,7 @@ add_executable(chuds-tests
     test_message.cpp
     test_transport.cpp
     test_io.cpp
+    test_wire_format.cpp
 )
 target_link_libraries(chuds-tests PRIVATE chuds doctest::doctest)
 target_compile_options(chuds-tests PRIVATE -Wall -Wextra -Wconversion)

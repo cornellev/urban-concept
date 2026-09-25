@@ -3,6 +3,7 @@
 #include <linux/can/error.h>
 #include <linux/can/raw.h>
 #include <net/if.h>
+#include <poll.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -12,7 +13,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <thread>
+#include <expected>
 
 #include "chuds/message.hpp"
 #include "chuds/socketcan_transport.hpp"  // IWYU pragma: keep
@@ -42,23 +43,20 @@ bool skip_without_can(bool opened) {
     return true;
 }
 
-// recv is non-blocking, so poll briefly for a frame to arrive
+// wait for a frame or bus event, then receive it
 RxResult recv_wait(cev::SocketCanTransport& t) {
-    for (int i = 0; i < 200; ++i) {
-        const auto r = t.recv();
-        if (r.status != RxStatus::Empty) {
-            return r;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    if (!t.wait(std::chrono::seconds{1})) {
+        return std::unexpected(RxError::Empty);
     }
-    return {RxStatus::Empty, {}};
+    return t.recv();
 }
 
-// receive n frames and count how many were Malformed
-int count_malformed(cev::SocketCanTransport& t, int n) {
+// receive n frames and count how many were foreign
+int count_foreign(cev::SocketCanTransport& t, int n) {
     int count = 0;
     for (int i = 0; i < n; ++i) {
-        if (recv_wait(t).status == RxStatus::Malformed) {
+        const auto r = recv_wait(t);
+        if (!r && r.error() == RxError::ForeignFrame) {
             ++count;
         }
     }
@@ -94,16 +92,13 @@ int open_raw(bool fd) {
     return s;
 }
 
-// poll a raw socket briefly for a frame to arrive
+// wait for a frame on a raw socket, then read it
 ssize_t read_raw(int s, canfd_frame& cf) {
-    for (int i = 0; i < 200; ++i) {
-        const ssize_t n = ::recv(s, &cf, sizeof(cf), MSG_DONTWAIT);
-        if (n >= 0) {
-            return n;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    pollfd p{.fd = s, .events = POLLIN, .revents = 0};
+    if (::poll(&p, 1, 1000) <= 0) {
+        return -1;
     }
-    return -1;
+    return ::recv(s, &cf, sizeof(cf), MSG_DONTWAIT);
 }
 }  // namespace
 
@@ -112,11 +107,16 @@ static_assert(Transport<cev::SocketCanTransport>);
 TEST_CASE("a default transport is closed and reports errors, not silence") {
     cev::SocketCanTransport t;
     CHECK_FALSE(t.is_open());
+    CHECK_FALSE(t.wait(std::chrono::milliseconds{0}));
     CanFrame f{};
-    f.id  = CanId::from_raw(0x123);
-    f.len = 2;
-    CHECK(t.send(f) == TxStatus::Error);
-    CHECK(t.recv().status == RxStatus::Error);
+    f.id            = CanId::from_raw(0x123);
+    f.len           = 2;
+    const auto sent = t.send(f);
+    REQUIRE_FALSE(sent.has_value());
+    CHECK(sent.error() == TxError::Error);
+    const auto got = t.recv();
+    REQUIRE_FALSE(got.has_value());
+    CHECK(got.error() == RxError::Error);
 }
 
 TEST_CASE("opening a nonexistent interface fails") {
@@ -136,11 +136,11 @@ TEST_CASE("round-trips a chuds message over a CAN-FD interface") {
     REQUIRE(msg.has_value());
     const auto frame = encode(*msg);
     REQUIRE(frame.has_value());
-    REQUIRE(tx.send(*frame) == TxStatus::Queued);
+    REQUIRE(tx.send(*frame).has_value());
 
     const auto r = recv_wait(rx);
-    REQUIRE(r.status == RxStatus::Received);
-    const auto out = decode(r.frame);
+    REQUIRE(r.has_value());
+    const auto out = decode(*r);
     REQUIRE(out.has_value());
     CHECK(out->cls == MsgClass::Telemetry);
     CHECK(out->subaddress == 0x10);
@@ -154,7 +154,23 @@ TEST_CASE("recv reports empty on a quiet bus") {
     if (skip_without_can(rx.open(test_if()))) {
         return;
     }
-    CHECK(rx.recv().status == RxStatus::Empty);
+    CHECK(rx.recv() == std::unexpected(RxError::Empty));
+}
+
+TEST_CASE("wait times out on a quiet bus and wakes when a frame arrives") {
+    cev::SocketCanTransport tx;
+    cev::SocketCanTransport rx;
+    if (skip_without_can(rx.open(test_if()) && tx.open(test_if()))) {
+        return;
+    }
+    CHECK_FALSE(rx.wait(std::chrono::milliseconds{20}));
+
+    CanFrame f{};
+    f.id  = CanId::from_raw(0x123);
+    f.len = 2;
+    REQUIRE(tx.send(f).has_value());
+    CHECK(rx.wait(std::chrono::seconds{1}));
+    CHECK(rx.recv().has_value());
 }
 
 TEST_CASE("send rejects a malformed frame before it reaches the wire") {
@@ -165,15 +181,15 @@ TEST_CASE("send rejects a malformed frame before it reaches the wire") {
     CanFrame bad_id{};
     bad_id.id  = CanId::from_raw(0x800);  // past the 11-bit standard range
     bad_id.len = 2;
-    CHECK(tx.send(bad_id) == TxStatus::Error);
+    CHECK(tx.send(bad_id) == std::unexpected(TxError::Error));
 
     CanFrame bad_len{};
     bad_len.id  = CanId::from_raw(0x100);
     bad_len.len = 65;  // past the FD payload
-    CHECK(tx.send(bad_len) == TxStatus::Error);
+    CHECK(tx.send(bad_len) == std::unexpected(TxError::Error));
 
     bad_len.len = 9;  // not a CAN-FD size
-    CHECK(tx.send(bad_len) == TxStatus::Error);
+    CHECK(tx.send(bad_len) == std::unexpected(TxError::Error));
 }
 
 TEST_CASE("recv rejects foreign frames instead of forging a standard id") {
@@ -195,8 +211,8 @@ TEST_CASE("recv rejects foreign frames instead of forging a standard id") {
     ef.len    = 8;
     REQUIRE(::write(ext, &ef, sizeof(ef)) == static_cast<ssize_t>(sizeof(ef)));
 
-    // every foreign frame is Malformed, never a decodable Received
-    CHECK(count_malformed(rx, 2) == 2);
+    // every foreign frame is rejected, never handed on as a decodable frame
+    CHECK(count_foreign(rx, 2) == 2);
     ::close(classic);
     ::close(ext);
 }
@@ -218,7 +234,7 @@ TEST_CASE("recv rejects remote frames and ids past the standard range") {
     wide.len    = 8;
     REQUIRE(::write(raw, &wide, sizeof(wide)) == static_cast<ssize_t>(sizeof(wide)));
 
-    CHECK(count_malformed(rx, 2) == 2);
+    CHECK(count_foreign(rx, 2) == 2);
     ::close(raw);
 }
 
@@ -236,7 +252,7 @@ TEST_CASE("send puts the exact id, BRS flag, length, and bytes on the wire") {
     for (std::uint8_t i = 0; i < f.len; ++i) {
         f.data[i] = static_cast<std::uint8_t>(0xA0 + i);
     }
-    REQUIRE(tx.send(f) == TxStatus::Queued);
+    REQUIRE(tx.send(f).has_value());
 
     canfd_frame cf{};
     REQUIRE(read_raw(raw, cf) == static_cast<ssize_t>(sizeof(cf)));
@@ -261,23 +277,22 @@ TEST_CASE("a bus-off error frame holds BusOff until a restart") {
     err.can_dlc = CAN_ERR_DLC;
     REQUIRE(::write(raw, &err, sizeof(err)) == static_cast<ssize_t>(sizeof(err)));
 
-    REQUIRE(recv_wait(t).status == RxStatus::BusOff);
-    // a quiet bus after bus-off is still BusOff, not Empty
-    CHECK(t.recv().status == RxStatus::BusOff);
+    CHECK(recv_wait(t) == std::unexpected(RxError::BusOff));
+    // a quiet bus after bus-off is still BusOff, not an empty success
+    CHECK(t.recv() == std::unexpected(RxError::BusOff));
 
     CanFrame f{};
     f.id  = CanId::from_raw(0x123);
     f.len = 2;
-    CHECK(t.send(f) == TxStatus::BusOff);
+    CHECK(t.send(f) == std::unexpected(TxError::BusOff));
 
     err.can_id = CAN_ERR_FLAG | CAN_ERR_RESTARTED;
     REQUIRE(::write(raw, &err, sizeof(err)) == static_cast<ssize_t>(sizeof(err)));
 
-    auto status = RxStatus::BusOff;
-    for (int i = 0; i < 200 && status == RxStatus::BusOff; ++i) {
-        status = t.recv().status;
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    RxResult r = std::unexpected(RxError::BusOff);
+    while (r == std::unexpected(RxError::BusOff) && t.wait(std::chrono::seconds{1})) {
+        r = t.recv();
     }
-    CHECK(status == RxStatus::Empty);
+    CHECK(r == std::unexpected(RxError::Empty));
     ::close(raw);
 }

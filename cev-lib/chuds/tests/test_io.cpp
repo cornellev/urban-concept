@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include <array>
+#include <expected>
 #include <optional>
 
 #include "chuds/io.hpp"
@@ -11,17 +12,17 @@ namespace {
 // a loopback transport: send stores one frame, recv hands it back once
 struct Loopback {
     std::optional<CanFrame> pending;
-    TxStatus send(const CanFrame& f) {
+    TxResult send(const CanFrame& f) {
         pending = f;
-        return TxStatus::Queued;
+        return {};
     }
     RxResult recv() {
         if (!pending) {
-            return RxResult{RxStatus::Empty, {}};
+            return std::unexpected(RxError::Empty);
         }
-        RxResult r{RxStatus::Received, *pending};
+        const CanFrame f = *pending;
         pending.reset();
-        return r;
+        return f;
     }
 };
 }  // namespace
@@ -32,43 +33,53 @@ TEST_CASE("send and recv move a Message without the caller touching a frame") {
     const auto m = make_message(MsgClass::Command, 0x40, MsgType::Update, body);
     REQUIRE(m.has_value());
 
-    CHECK(send(t, *m) == TxStatus::Queued);
+    CHECK(send(t, *m).has_value());
 
     const auto r = recv(t);
-    REQUIRE(r.status == RxStatus::Received);
-    REQUIRE(r.msg.has_value());
-    CHECK(r.msg->cls == MsgClass::Command);
-    CHECK(r.msg->subaddress == 0x40);
-    CHECK(r.msg->type == MsgType::Update);
-    REQUIRE(r.msg->body_view().size() == 2);
-    CHECK(r.msg->body_view()[1] == 0x1E);
+    REQUIRE(r.has_value());
+    const Message& got = *r;
+    CHECK(got.cls == MsgClass::Command);
+    CHECK(got.subaddress == 0x40);
+    CHECK(got.type == MsgType::Update);
+    REQUIRE(got.body_view().size() == 2);
+    CHECK(got.body_view()[1] == 0x1E);
 }
 
 TEST_CASE("recv passes an empty bus through as Empty") {
     Loopback t;
-    const auto r = recv(t);
-    CHECK(r.status == RxStatus::Empty);
-    CHECK_FALSE(r.msg.has_value());
+    CHECK(recv(t) == std::unexpected(RxError::Empty));
 }
 
-TEST_CASE("recv reports a frame that arrives but does not decode as Malformed") {
+TEST_CASE("recv reports why a frame that arrives does not decode") {
     struct BadFrame {
-        TxStatus send(const CanFrame& /*f*/) { return TxStatus::Queued; }
+        TxResult send(const CanFrame& /*f*/) { return {}; }
         RxResult recv() {
             CanFrame f{};
             f.id  = CanId::from_raw(0x300);  // reserved class, decode rejects
             f.len = 2;
-            return {RxStatus::Received, f};
+            return f;
         }
     } t;
     const auto r = recv(t);
-    CHECK(r.status == RxStatus::Malformed);
-    CHECK_FALSE(r.msg.has_value());
+    REQUIRE_FALSE(r.has_value());
+    CHECK(r.error() == RxError::UnknownClass);
+}
+
+TEST_CASE("recv passes a transport fault through unchanged") {
+    struct Dead {
+        TxResult send(const CanFrame& /*f*/) { return std::unexpected(TxError::BusOff); }
+        RxResult recv() { return std::unexpected(RxError::BusOff); }
+    } t;
+    const auto r = recv(t);
+    REQUIRE_FALSE(r.has_value());
+    CHECK(r.error() == RxError::BusOff);
 }
 
 TEST_CASE("send reports Error when the message cannot be encoded") {
     Loopback t;
     Message m{};
-    m.body_len = kMaxBody + 1;  // encode rejects
-    CHECK(send(t, m) == TxStatus::Error);
+    m.body_len   = kMaxBody + 1;  // encode rejects
+    const auto r = send(t, m);
+    REQUIRE_FALSE(r.has_value());
+    CHECK(r.error() == TxError::Error);
 }

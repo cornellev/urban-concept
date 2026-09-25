@@ -85,8 +85,8 @@ int main() {
                               static_cast<float>((joules - report_joules) / period_s),
                               static_cast<float>(joules)};
             bus.publish(kNodeId, t);
-            printf("v=%.2f V  i=%.2f A  p=%.1f W  e=%.1f J\n", t.voltage, t.current, t.power,
-                   joules);
+            std::printf("v=%.2f V  i=%.2f A  p=%.1f W  e=%.1f J\n", t.voltage, t.current, t.power,
+                        joules);
             report_joules = joules;
             period_s      = 0;
             v_sum         = 0;

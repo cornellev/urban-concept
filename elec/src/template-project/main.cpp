@@ -29,7 +29,7 @@ int main() {
     while (true) {
         for (int i = 0; i < kMaxRxPerPass; ++i) {
             const auto rx = bus.recv();
-            if (rx.status != chuds::RxStatus::Received || !rx.msg) {
+            if (!rx) {
                 break;
             }
             // handle messages addressed to this node here
