@@ -175,10 +175,14 @@ TEST_CASE("round-trips a chuds message over a CAN-FD interface") {
     if (skip_without_can(rx.open(test_if()) && tx.open(test_if()))) {
         return;
     }
-    const std::array<std::uint8_t, 3> body{0x01, 0x39, 0x05};
-    const auto msg = make_message(MsgClass::Telemetry, 0x10, MsgType::Update, body);
-    REQUIRE(msg.has_value());
-    const auto frame = encode(*msg);
+    const Message msg{
+        .cls        = MsgClass::Telemetry,
+        .subaddress = 0x10,
+        .type       = MsgType::Update,
+        .body       = {0x01, 0x39, 0x05},
+        .body_len   = 3,
+    };
+    const auto frame = encode(msg);
     REQUIRE(frame.has_value());
     REQUIRE(tx.send(*frame).has_value());
 

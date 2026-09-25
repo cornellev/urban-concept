@@ -4,7 +4,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
-#include <span>
 #include <string_view>
 #include <utility>
 
@@ -101,22 +100,10 @@ TEST_CASE("decode recovers the true body length past CAN-FD padding") {
     CHECK(out->body[2] == 0xCC);
 }
 
-TEST_CASE("make_message builds from a span and body_view reads it back") {
-    const std::array<std::uint8_t, 3> data{0x11, 0x22, 0x33};
-    const auto m = make_message(MsgClass::Telemetry, 0x05, MsgType::Update, data);
-    REQUIRE(m.has_value());
-    const auto view = m->body_view();
-    REQUIRE(view.size() == 3);
-    CHECK(view[0] == 0x11);
-    CHECK(view[2] == 0x33);
-}
-
 TEST_CASE("encode rounds a non-DLC length up to a valid CAN-FD size") {
     // 9 body bytes -> payload 11 -> not a valid DLC, rounds to 12
-    const std::array<std::uint8_t, 9> data{};
-    const auto m = make_message(MsgClass::Telemetry, 0x01, MsgType::Update, data);
-    REQUIRE(m.has_value());
-    const auto f = encode(*m);
+    const Message m{.cls = MsgClass::Telemetry, .subaddress = 0x01, .body_len = 9};
+    const auto f = encode(m);
     REQUIRE(f.has_value());
     CHECK(f->len == 12);
     // decode still recovers the true body length from the length byte
@@ -188,9 +175,7 @@ TEST_CASE("read_stop needs both the emergency class and the stop type") {
 }
 
 TEST_CASE("read_stop rejects a message that is not a STOP") {
-    const std::array<std::uint8_t, 1> body{0x01};
-    const auto m = make_message(MsgClass::Telemetry, 0x10, MsgType::Update,
-                                std::span<const std::uint8_t>(body));
+    const auto m = make_message(MsgClass::Telemetry, 0x10, MsgType::Update, WheelSpeed{1});
     REQUIRE(m.has_value());
     CHECK_FALSE(read_stop(*m).has_value());
 }
@@ -208,16 +193,13 @@ TEST_CASE("an empty body encodes to the two header bytes") {
     CHECK(f->data[1] == 0);
 }
 
-TEST_CASE("an over-long body is rejected on build and encode") {
-    const std::array<std::uint8_t, kMaxBody + 1> big{};
-    CHECK_FALSE(make_message(MsgClass::Telemetry, 0, MsgType::Update, big).has_value());
-
+TEST_CASE("an over-long body is rejected on encode") {
     const Message m{.body_len = kMaxBody + 1};
     CHECK_FALSE(encode(m).has_value());
 }
 
 TEST_CASE("make_message rejects an invalid class or type") {
-    const std::array<std::uint8_t, 1> body{0x01};
+    const WheelSpeed body{1};
     CHECK_FALSE(make_message(static_cast<MsgClass>(3), 0, MsgType::Update, body).has_value());
     CHECK_FALSE(make_message(MsgClass::Telemetry, 0, static_cast<MsgType>(5), body).has_value());
 }
@@ -332,19 +314,13 @@ TEST_CASE("a struct body round-trips through make_message and body_as") {
 }
 
 TEST_CASE("body_as rejects a size mismatch") {
-    const std::array<std::uint8_t, 1> one{0xAB};
-    const auto m = make_message(MsgClass::Telemetry, 0x10, MsgType::Update,
-                                std::span<const std::uint8_t>(one));
-    REQUIRE(m.has_value());
-    CHECK_FALSE(body_as<WheelSpeed>(*m).has_value());  // body is 1 byte, wants 2
+    const Message m{.cls = MsgClass::Telemetry, .body = {0xAB}, .body_len = 1};
+    CHECK_FALSE(body_as<WheelSpeed>(m).has_value());  // body is 1 byte, wants 2
 }
 
 TEST_CASE("body_as rejects a body larger than the struct") {
-    const std::array<std::uint8_t, 3> three{0x01, 0x02, 0x03};
-    const auto m = make_message(MsgClass::Telemetry, 0x10, MsgType::Update,
-                                std::span<const std::uint8_t>(three));
-    REQUIRE(m.has_value());
-    CHECK_FALSE(body_as<WheelSpeed>(*m).has_value());
+    const Message m{.cls = MsgClass::Telemetry, .body = {0x01, 0x02, 0x03}, .body_len = 3};
+    CHECK_FALSE(body_as<WheelSpeed>(m).has_value());
 }
 
 TEST_CASE("struct make_message and body_as are constexpr") {

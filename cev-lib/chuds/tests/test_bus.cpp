@@ -1,6 +1,5 @@
 #include <doctest/doctest.h>
 
-#include <array>
 #include <cstdint>
 #include <expected>
 #include <optional>
@@ -96,11 +95,15 @@ static_assert(!CanReportReady<Bus<Loopback>>);
 
 TEST_CASE("a bus sends and receives a message without the caller touching a frame") {
     Bus<Loopback> bus;
-    const std::array<std::uint8_t, 2> body{0x01, 0x1E};
-    const auto m = make_message(MsgClass::Command, 0x40, MsgType::Update, body);
-    REQUIRE(m.has_value());
+    const Message m{
+        .cls        = MsgClass::Command,
+        .subaddress = 0x40,
+        .type       = MsgType::Update,
+        .body       = {0x01, 0x1E},
+        .body_len   = 2,
+    };
 
-    CHECK(bus.send(*m).has_value());
+    CHECK(bus.send(m).has_value());
 
     const auto r = bus.recv();
     REQUIRE(r.has_value());

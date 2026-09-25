@@ -31,11 +31,15 @@ TEST_CASE("format_message prints joulemeter floats") {
 }
 
 TEST_CASE("format_message falls back to the header for a message outside the catalog") {
-    const std::array<std::uint8_t, 2> body{0x01, 0x02};
-    const auto m = make_message(MsgClass::Command, 0x42, MsgType::Update, body);
-    REQUIRE(m.has_value());
+    const Message m{
+        .cls        = MsgClass::Command,
+        .subaddress = 0x42,
+        .type       = MsgType::Update,
+        .body       = {0x01, 0x02},
+        .body_len   = 2,
+    };
     std::array<char, 96> line{};
-    format_message(*m, line);
+    format_message(m, line);
     CHECK(std::string_view(line.data()) == "class 1 subaddress 0x42 type 0, 2 body bytes");
 }
 

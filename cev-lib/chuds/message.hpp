@@ -61,22 +61,6 @@ struct Message {
     }
 };
 
-// builds a message from a body view
-// returns nullopt if the body is too long
-[[nodiscard]] constexpr std::optional<Message> make_message(MsgClass cls, std::uint8_t sub,
-                                                            MsgType type,
-                                                            std::span<const std::uint8_t> body) {
-    if (!is_valid(cls) || !is_valid(type) || body.size() > kMaxBody) {
-        return std::nullopt;
-    }
-
-    Message m{.cls = cls, .subaddress = sub, .type = type};
-    std::copy_n(body.begin(), body.size(), m.body.begin());
-    m.body_len = static_cast<std::uint8_t>(body.size());
-
-    return m;
-}
-
 // structs are sent as raw bytes, so the host must be little endian
 static_assert(std::endian::native == std::endian::little);
 static_assert(std::numeric_limits<float>::is_iec559);
@@ -95,16 +79,24 @@ constexpr void check_wire_body() {
 
 // build a message whose body is a trivially-copyable struct
 // the struct's bytes are the wire body, little-endian
+// returns nullopt if the class or type is invalid
 template <class T>
-    requires(!std::is_convertible_v<const T&, std::span<const std::uint8_t>>)
 [[nodiscard]] constexpr std::optional<Message> make_message(MsgClass cls, std::uint8_t sub,
                                                             MsgType type, const T& value) {
     // ensure the struct can be sent over wire
     check_wire_body<T>();
 
+    if (!is_valid(cls) || !is_valid(type)) {
+        return std::nullopt;
+    }
+
     const auto bytes = std::bit_cast<std::array<std::uint8_t, sizeof(T)>>(value);
 
-    return make_message(cls, sub, type, std::span<const std::uint8_t>(bytes));
+    Message m{.cls = cls, .subaddress = sub, .type = type};
+    std::copy_n(bytes.begin(), bytes.size(), m.body.begin());
+    m.body_len = sizeof(T);
+
+    return m;
 }
 
 // read the body of a message back as a struct
