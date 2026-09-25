@@ -38,7 +38,7 @@ static_assert(is_valid_fd_len(kMaxFdPayload));
 
 // a raw CAN-FD frame with 11-bit id and up to 64 bytes of data
 // len is the actual data length, a valid CAN-FD size (see is_valid_fd_len)
-// purposely kept non-chuds specific
+// purposely kept not specific to chuds, and only contains the raw CAN-FD concepts
 struct CanFrame {
     CanId id{};
     std::uint8_t len{};

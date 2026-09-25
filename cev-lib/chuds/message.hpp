@@ -77,7 +77,7 @@ struct Message {
     return m;
 }
 
-// chuds struct bodies are the little-endian wire bytes. the host must match
+// structs are sent as raw bytes, so the host must be little endian
 static_assert(std::endian::native == std::endian::little);
 static_assert(std::numeric_limits<float>::is_iec559);
 
@@ -128,8 +128,8 @@ template <class T>
 // transmits an emergency class with a subaddress as the severity (0 is the most severe)
 // body contains [sender][detail...]
 // overly long detail is truncated to prevent failures
-// building a stop message should never fail, so we have a dedicated function for it
-// only the pi sends STOP, since each CAN id must have exactly one transmitter
+// never fails, so a stop can always be sent
+// only the VCU (pi/jetson) sends STOP, since each CAN id must have exactly one transmitter
 [[nodiscard]] constexpr Message make_stop(std::uint8_t severity, std::uint8_t sender,
                                           std::string_view detail) {
     constexpr std::size_t kMaxDetail = kMaxBody - 1;
@@ -166,7 +166,6 @@ struct StopView {
 
 // id = class + subaddress, payload = [type][body_len][body...]
 [[nodiscard]] constexpr std::optional<CanFrame> encode(const Message& m) {
-    // ensure validity of the class and type, and ensure body isn't too long
     if (!is_valid(m.cls) || !is_valid(m.type) || m.body_len > kMaxBody) {
         return std::nullopt;
     }
@@ -194,7 +193,6 @@ struct StopView {
         return std::unexpected(RxError::UnknownClass);
     }
 
-    // ensure the frame is longer than the header length, and is actually a valid length
     if (f.len < kHeaderLen || !is_valid_fd_len(f.len)) {
         return std::unexpected(RxError::BadLength);
     }

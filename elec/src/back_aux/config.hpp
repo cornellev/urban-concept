@@ -10,7 +10,8 @@ constexpr unsigned kTurnRight = 1;
 constexpr unsigned kRpmLeft  = 10;
 constexpr unsigned kRpmRight = 11;
 
-// windshield wiper servo, pwm output; bus command is on/off, the node runs the sweep
+// windshield wiper servo, pwm output
+// the bus command is on/off, and the node runs the sweep
 constexpr unsigned kWiperPwm = 13;
 
 // wiper sweep arc and motion

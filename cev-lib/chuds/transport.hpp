@@ -72,7 +72,7 @@ using RxResult = std::expected<CanFrame, RxError>;
     return true;
 }
 
-// the seam between chuds and a driver
+// the interface between chuds and a driver
 // send and recv report explicit outcomes so a dead bus is not mistaken for quiet
 template <typename T>
 concept Transport = requires(T t, const CanFrame& f) {

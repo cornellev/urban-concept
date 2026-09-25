@@ -53,6 +53,8 @@ class Mcp251863Transport {
         gpio_set_dir(nint_, GPIO_IN);
         gpio_pull_up(nint_);
 
+        // init needs the spi and pin setup above
+        // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer)
         init_ok_ = mcp_.init() == 1;
     }
 

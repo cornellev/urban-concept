@@ -43,7 +43,7 @@ struct BadFrame {
 struct NotReady {
     TxResult send(const CanFrame& /*f*/) { return std::unexpected(TxError::Error); }
     RxResult recv() { return std::unexpected(RxError::Error); }
-    bool ready() const { return false; }
+    [[nodiscard]] bool ready() const { return false; }
 };
 
 // a transport whose bus is off

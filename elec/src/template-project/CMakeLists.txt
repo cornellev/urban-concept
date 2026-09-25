@@ -4,7 +4,7 @@ add_executable(template-project
 
 target_compile_options(template-project PRIVATE -Wall -Wextra)
 
-# board_common (src/common) is the shared board base: pico_stdlib, spi, gpio, and the chuds mcp bus
+# board_common (src/common) is the shared board base: pico_stdlib, spi, gpio, and the chuds mcp transport
 target_link_libraries(template-project
     board_common
 )

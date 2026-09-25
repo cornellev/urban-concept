@@ -25,6 +25,9 @@ Checks: >
   -cppcoreguidelines-pro-type-vararg,
   -readability-implicit-bool-conversion,
   -readability-convert-member-functions-to-static,
-  -cppcoreguidelines-avoid-non-const-global-variables
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  -modernize-use-std-print
 CheckOptions:
+  # the default list minus std::expected, since Bus::send results may be ignored
+  bugprone-unused-return-value.CheckedReturnTypes: '::std::error_code;::std::error_condition;::std::errc;::boost::system::error_code'
   misc-include-cleaner.IgnoreHeaders: 'pico/.*;hardware/.*'

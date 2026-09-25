@@ -65,7 +65,8 @@ int main() {
 
     // body state bits currently applied
     std::uint8_t body{};
-    // a stop latches until reset; todo clear on a ratified resume command
+    // a stop latches until reset
+    // todo clear on a ratified resume command
     bool stopped{};
     cev::Interval pub{kPublishPeriodMs};
     absolute_time_t command_deadline = make_timeout_time_ms(kCommandTimeoutMs);

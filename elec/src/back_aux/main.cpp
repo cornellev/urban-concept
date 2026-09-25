@@ -24,7 +24,8 @@ constexpr std::uint32_t kCommandTimeoutMs = 1000;
 // frames handled per loop pass, the mcp rx fifo depth, so a flooded bus cannot starve the timers
 constexpr int kMaxRxPerPass = 8;
 
-// servo pwm, 50 hz; center pulse and half-span at full deflection
+// servo pwm at 50 hz
+// the center pulse, and the half-span at full deflection
 constexpr std::uint16_t kWiperCenterUs   = 1500;
 constexpr std::uint16_t kWiperHalfSpanUs = 500;
 
@@ -56,7 +57,8 @@ int step_toward(int from, int to) {
     return from;
 }
 
-// advance the sweep one tick; runs even while stopped so a park completes
+// advance the sweep one tick
+// runs even while stopped so a park completes
 void wiper_tick(Wiper& w) {
     if (w.parking) {
         if (w.angle != kWiperParkDeg) {
@@ -136,7 +138,8 @@ int main() {
     // body state bits currently applied
     std::uint8_t body{};
     Wiper wiper{};
-    // a stop latches until reset; todo clear on a ratified resume command
+    // a stop latches until reset
+    // todo clear on a ratified resume command
     bool stopped{};
     cev::Interval pub{kPublishPeriodMs};
     cev::Interval wiper_iv{kWiperTickMs};

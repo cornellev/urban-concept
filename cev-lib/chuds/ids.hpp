@@ -34,7 +34,7 @@ class CanId {
         raw_ = static_cast<std::uint16_t>(class_bits | subaddress);
     }
 
-    // wrap a raw 11-bit value taken off the wire, for the driver seam only
+    // wrap a raw 11-bit value taken off the wire, for transports only
     [[nodiscard]] static constexpr CanId from_raw(std::uint16_t bits) { return CanId(bits); }
 
     [[nodiscard]] constexpr MsgClass cls() const {
@@ -46,7 +46,7 @@ class CanId {
         return static_cast<std::uint8_t>(raw_ & kSubaddressMask);
     }
 
-    // the raw bits, for the driver seam only
+    // the raw bits, for transports only
     [[nodiscard]] constexpr std::uint16_t raw() const { return raw_; }
 
     // within the 11-bit standard range

@@ -32,7 +32,7 @@ struct NotATransport {};
 static_assert(Transport<Loopback>);
 static_assert(!Transport<NotATransport>);
 
-TEST_CASE("a transport moves a frame through the seam") {
+TEST_CASE("a transport moves a frame through send and recv") {
     Loopback t;
     CanFrame f{};
     f.id  = CanId::from_raw(0x123);

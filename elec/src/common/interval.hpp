@@ -6,11 +6,12 @@
 
 namespace cev {
 
-// a fixed-period tick. due() returns true once per period and advances the deadline
+// a fixed-period tick
+// due() returns true once per period and advances the deadline
 // a slightly late tick keeps the original phase so the period does not drift
 // a stall longer than a period skips the missed ticks instead of firing them back to back
 struct Interval {
-    std::uint32_t period_ms;
+    std::uint32_t period_ms{};
     absolute_time_t next = make_timeout_time_ms(period_ms);
 
     [[nodiscard]] bool due() {
