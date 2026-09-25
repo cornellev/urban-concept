@@ -40,11 +40,17 @@ macro(report label names verarg expected)
     endif()
 endmacro()
 
+# a windows path's backslashes would be read as escapes inside the macro
+file(TO_CMAKE_PATH "$ENV{PICO_TOOLCHAIN_PATH}" toolchain_path)
+
 message("checking build tools:")
-report("arm-gcc " arm-none-eabi-gcc -dumpversion "${ARM_GCC_EXPECTED}" "$ENV{PICO_TOOLCHAIN_PATH}/bin")
+report("arm-gcc " arm-none-eabi-gcc -dumpversion "${ARM_GCC_EXPECTED}" "${toolchain_path}/bin")
 report("cmake   " cmake --version "")
 report("ninja   " ninja --version "")
 report("picotool" picotool version "${PICOTOOL_EXPECTED}" "${CMAKE_CURRENT_LIST_DIR}/../.tools/picotool")
+# the same lookup pico-sdk's build uses
+find_package(Python3 COMPONENTS Interpreter QUIET)
+report("python  " "${Python3_EXECUTABLE}" --version "")
 message("")
 
 if(problems EQUAL 0)

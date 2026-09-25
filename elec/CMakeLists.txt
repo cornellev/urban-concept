@@ -14,7 +14,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # help find_package(picotool) across install locations
 # the cmake variable is searched before the env var, so probe brew only when no shell set the env
-if(WIN32)
+if(CMAKE_HOST_WIN32)
     list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_LIST_DIR}/.tools/picotool")
 endif()
 if(NOT DEFINED ENV{CMAKE_PREFIX_PATH})

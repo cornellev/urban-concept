@@ -19,7 +19,7 @@ The Pico SDK is vendored at the repo root in `vendor/pico-sdk/` as a git submodu
   ```powershell
   powershell -ExecutionPolicy Bypass -File setup/setup-windows.ps1
   ```
-  It installs anything missing (CMake, Ninja, Just, the GitHub CLI, and the arm compiler) and downloads picotool. Windows may pop up permission windows during installs. click yes for all of them.
+  It installs anything missing (CMake, Ninja, Just, the GitHub CLI, Python, and the arm compiler) and downloads picotool. Windows may pop up permission windows during installs. click yes for all of them.
 - Close and open a new terminal, because PATH may not be updated yet.
 
 ### macOS
@@ -35,6 +35,17 @@ The Pico SDK is vendored at the repo root in `vendor/pico-sdk/` as a git submodu
   ```
   It installs CMake, Ninja, Just, the GitHub CLI, picotool, and the arm compiler.
 - Close and open a new terminal, because PATH may not be updated yet.
+
+### Linux
+
+- Install these with your package manager:
+  - CMake 3.21 or newer
+  - Ninja
+  - Just 1.52.0 or newer
+  - Python 3
+  - the arm compiler (`arm-none-eabi-gcc`) 15.3, from [Arm](https://gitlab.arm.com/tooling/gnu-toolchains-for-arm)
+  - picotool 2.3
+- Run `just doctor` from the `elec/` folder to check them
 
 ### Nix
 
@@ -62,6 +73,19 @@ elec/build/src/<project>/<project>.uf2
 If a build fails right after installing or switching tools (for example it uses
 the wrong compiler), run `just clean` and build again. The old `build/` folder
 caches the previous compiler, so a stale cache can break the next build.
+
+## Editor (VS Code)
+
+We use the clangd extension instead of Microsoft's C/C++ IntelliSense because it integrates better with other platform's tools.
+For setup:
+
+- Build once first, because clangd reads `build/compile_commands.json`
+- Open the repo root (`urban-concept/`) in VS Code, not `elec/`
+- Install the recommended clangd extension when VS Code asks
+- If VS Code asks whether you trust the folder, click Trust
+- If it says clangd was not found on your PATH, click Install
+
+For other editors: pass `--query-driver=**/arm-none-eabi-*` to clangd.
 
 ## Flashing (putting firmware on a board)
 

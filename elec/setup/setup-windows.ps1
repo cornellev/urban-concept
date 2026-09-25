@@ -20,19 +20,24 @@ function Need($cmd, $pkg) {
         if ($LASTEXITCODE -ne 0) { throw "winget failed to install $pkg (exit $LASTEXITCODE)" }
     }
 }
+
+# winget writes PATH to the registry, not open shells, so a rerun would miss tools an earlier run installed
+$env:PATH += ";" + [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+
 Need cmake Kitware.CMake
 Need ninja Ninja-build.Ninja
 Need just Casey.Just
 Need gh GitHub.cli
-
-# winget writes PATH to the registry, not this session; append it so fresh installs are usable now
-$env:PATH += ";" + [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+# pico-sdk's boot_stage2 needs python
+# check for the py launcher because python.exe may be the microsoft store stub
+Need py Python.Python.3.14
 
 function Fetch($url, $sha, $dest) {
     New-Item -ItemType Directory -Force -Path $tools | Out-Null
     $zip = Join-Path $tools "download.zip"
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+    # gitlab.arm.com needs tls 1.3 and sends Invoke-WebRequest an empty 202, so use curl
+    curl.exe -fsSL -o $zip $url
+    if ($LASTEXITCODE -ne 0) { throw "download failed for $url (curl exit $LASTEXITCODE)" }
     if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne $sha) {
         Remove-Item $zip
         throw "sha256 mismatch for $url"
