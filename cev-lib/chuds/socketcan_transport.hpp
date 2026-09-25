@@ -62,7 +62,7 @@ class SocketCanTransport {
             return false;
         }
 
-        int fd = ::socket(PF_CAN, SOCK_RAW | SOCK_CLOEXEC, CAN_RAW);
+        const int fd = ::socket(PF_CAN, SOCK_RAW | SOCK_CLOEXEC, CAN_RAW);
         if (fd < 0) {
             return false;
         }
@@ -99,12 +99,14 @@ class SocketCanTransport {
         sockaddr_can addr{};
         addr.can_family  = AF_CAN;
         addr.can_ifindex = ifindex;
+        // bind takes the generic sockaddr, the kernel reads it as sockaddr_can
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
         if (::bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
             ::close(fd);
             return false;
         }
 
-        int flags = ::fcntl(fd, F_GETFL, 0);
+        const int flags = ::fcntl(fd, F_GETFL, 0);
         if (flags < 0 || ::fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
             ::close(fd);
             return false;
@@ -127,7 +129,7 @@ class SocketCanTransport {
         return ::poll(&p, 1, static_cast<int>(timeout.count())) > 0;
     }
 
-    [[nodiscard]] TxResult send(const CanFrame& f) {
+    [[nodiscard]] TxResult send(const CanFrame& f) const {
         if (fd_ < 0) {
             return std::unexpected(TxError::Error);
         }
@@ -149,7 +151,7 @@ class SocketCanTransport {
         cf.len   = f.len;
         std::copy_n(f.data.data(), f.len, cf.data);
 
-        ssize_t n = ::write(fd_, &cf, sizeof(cf));
+        const ssize_t n = ::write(fd_, &cf, sizeof(cf));
         if (n == static_cast<ssize_t>(sizeof(cf))) {
             return {};
         }
@@ -165,7 +167,7 @@ class SocketCanTransport {
         }
 
         canfd_frame cf{};
-        ssize_t n = ::read(fd_, &cf, sizeof(cf));
+        const ssize_t n = ::read(fd_, &cf, sizeof(cf));
         if (n < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 if (bus_off_) {

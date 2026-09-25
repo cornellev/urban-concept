@@ -1,5 +1,6 @@
 ---
 # the rp2040 reaches its registers through fixed addresses, so that analyzer check is noise
+# signed/unsigned comparisons here already cast explicitly, so std::cmp_* adds nothing
 Checks: >
   readability-*,
   cppcoreguidelines-*,
@@ -28,7 +29,8 @@ Checks: >
   -readability-convert-member-functions-to-static,
   -cppcoreguidelines-avoid-non-const-global-variables,
   -modernize-use-std-print,
-  -clang-analyzer-core.FixedAddressDereference
+  -clang-analyzer-core.FixedAddressDereference,
+  -modernize-use-integer-sign-comparison
 CheckOptions:
   # the default list minus std::expected, since Bus::send results may be ignored
   bugprone-unused-return-value.CheckedReturnTypes: '::std::error_code;::std::error_condition;::std::errc;::boost::system::error_code'

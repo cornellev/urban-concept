@@ -65,7 +65,7 @@ int count_foreign(SocketCanTransport& t, int n) {
 
 // a raw CAN socket for injecting frames the driver would never send itself
 int open_raw(bool fd) {
-    int s = ::socket(PF_CAN, SOCK_RAW, CAN_RAW);
+    const int s = ::socket(PF_CAN, SOCK_RAW, CAN_RAW);
     if (s < 0) {
         return -1;
     }
