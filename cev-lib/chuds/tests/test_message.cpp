@@ -191,43 +191,43 @@ TEST_CASE("make_message rejects an invalid class or type") {
 
 TEST_CASE("a frame shorter than the header is malformed") {
     CanFrame f{.len = 1};
-    CHECK(decode(f).error() == DecodeError::BadLength);
+    CHECK(decode(f).error() == RxError::BadLength);
 }
 
 TEST_CASE("a length byte larger than the frame is rejected") {
     CanFrame f{};
     f.data[1] = 20;  // claims 20 body bytes
     f.len     = 4;   // but only 2 are present
-    CHECK(decode(f).error() == DecodeError::BodyOverrun);
+    CHECK(decode(f).error() == RxError::BodyOverrun);
 }
 
 TEST_CASE("decode rejects an id outside the 11-bit standard range") {
     CanFrame f{};
     f.id  = CanId::from_raw(0x800);  // would otherwise alias to Emergency/STOP via the class mask
     f.len = 2;
-    CHECK(decode(f).error() == DecodeError::NonStandardId);
+    CHECK(decode(f).error() == RxError::NonStandardId);
 }
 
 TEST_CASE("decode rejects a reserved class") {
     CanFrame f{};
     f.id  = CanId::from_raw(0x300);
     f.len = 2;
-    CHECK(decode(f).error() == DecodeError::UnknownClass);
+    CHECK(decode(f).error() == RxError::UnknownClass);
 }
 
 TEST_CASE("decode rejects an unknown type byte") {
     CanFrame f{};
     f.data[0] = 5;
     f.len     = 2;
-    CHECK(decode(f).error() == DecodeError::UnknownType);
+    CHECK(decode(f).error() == RxError::UnknownType);
 }
 
 TEST_CASE("decode rejects a len that is not a CAN-FD size") {
     CanFrame f{};
     f.len = 9;
-    CHECK(decode(f).error() == DecodeError::BadLength);
+    CHECK(decode(f).error() == RxError::BadLength);
     f.len = 13;
-    CHECK(decode(f).error() == DecodeError::BadLength);
+    CHECK(decode(f).error() == RxError::BadLength);
 }
 
 TEST_CASE("body_view clamps a corrupt body_len instead of reading out of bounds") {
@@ -240,7 +240,7 @@ TEST_CASE("decode rejects a nonsensical len past the FD payload size") {
     CanFrame f{};
     f.data[1] = 4;
     f.len     = 255;
-    CHECK(decode(f).error() == DecodeError::BadLength);
+    CHECK(decode(f).error() == RxError::BadLength);
 }
 
 TEST_CASE("a struct body round-trips through make_message and body_as") {

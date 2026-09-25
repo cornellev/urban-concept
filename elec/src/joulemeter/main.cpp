@@ -2,8 +2,8 @@
 #include <cstdio>
 
 #include "chuds/chuds.hpp"
+#include "chuds/mcp_transport.hpp"
 #include "common/interval.hpp"
-#include "common/mcp_bus.hpp"
 #include "config.hpp"
 #include "hardware/adc.h"
 #include "pico/stdlib.h"
@@ -46,12 +46,15 @@ int main() {
     adc_gpio_init(kVoltageAdc);
     adc_gpio_init(kCurrentAdc);
 
-    cev::McpBus bus{{.sck  = kSpiSck,
-                     .mosi = kSpiMosi,
-                     .miso = kSpiMiso,
-                     .cs   = kMcpCs,
-                     .stby = kMcpStby,
-                     .nint = kMcpInt}};
+    chuds::Bus<chuds::Mcp251863Transport> bus{chuds::Mcp251863Transport{{.sck  = kSpiSck,
+                                                                         .mosi = kSpiMosi,
+                                                                         .miso = kSpiMiso,
+                                                                         .cs   = kMcpCs,
+                                                                         .stby = kMcpStby,
+                                                                         .nint = kMcpInt}}};
+    if (!bus.ready()) {
+        std::printf("can init failed\n");
+    }
 
     // energy accumulates over a whole run, so integrate in double to hold resolution
     double joules{};
@@ -84,7 +87,7 @@ int main() {
             const Telemetry t{static_cast<float>(v_sum / n), static_cast<float>(i_sum / n),
                               static_cast<float>((joules - report_joules) / period_s),
                               static_cast<float>(joules)};
-            bus.publish(kNodeId, t);
+            bus.send(chuds::MsgClass::Telemetry, kNodeId, chuds::MsgType::Update, t);
             std::printf("v=%.2f V  i=%.2f A  p=%.1f W  e=%.1f J\n", t.voltage, t.current, t.power,
                         joules);
             report_joules = joules;

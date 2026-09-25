@@ -9,15 +9,10 @@
 namespace {
 
 // send a body state with headlights on
-int run_send(chuds::SocketCanTransport& t) {
+int run_send(chuds::Bus<chuds::SocketCanTransport>& bus) {
     const chuds::BodyState state{chuds::BodyState::kHeadlights};
-    const auto msg = chuds::make_message(chuds::MsgClass::Command, chuds::kBodyStateId,
-                                         chuds::MsgType::Update, state);
-    if (!msg) {
-        std::fprintf(stderr, "error\n");
-        return 1;
-    }
-    const auto st = chuds::send(t, *msg);
+    const auto st =
+        bus.send(chuds::MsgClass::Command, chuds::kBodyStateId, chuds::MsgType::Update, state);
     if (!st) {
         std::fprintf(stderr, "send failed: %d\n", std::to_underlying(st.error()));
         return 1;
@@ -27,16 +22,15 @@ int run_send(chuds::SocketCanTransport& t) {
 }
 
 // print the first message that arrives
-int run_recv(chuds::SocketCanTransport& t, std::string_view ifname) {
+int run_recv(chuds::Bus<chuds::SocketCanTransport>& bus, std::string_view ifname) {
     std::printf("listening on %.*s\n", static_cast<int>(ifname.size()), ifname.data());
-    while (t.wait(std::chrono::seconds{5})) {
-        const auto r = chuds::recv(t);
+    while (bus.wait(std::chrono::seconds{5})) {
+        const auto r = bus.recv();
         if (r) {
             chuds::print_message(*r);
             return 0;
         }
-        // a dead bus or driver is fatal, a foreign or malformed frame is not
-        if (r.error() == chuds::RxError::BusOff || r.error() == chuds::RxError::Error) {
+        if (chuds::is_fault(r.error())) {
             std::fprintf(stderr, "recv failed: %d\n", std::to_underlying(r.error()));
             return 1;
         }
@@ -56,12 +50,12 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-    chuds::SocketCanTransport t;
-    if (!t.open(ifname)) {
+    chuds::Bus<chuds::SocketCanTransport> bus;
+    if (!bus.open(ifname)) {
         std::fprintf(stderr, "failed to open %.*s\n", static_cast<int>(ifname.size()),
                      ifname.data());
         return 1;
     }
 
-    return mode == "send" ? run_send(t) : run_recv(t, ifname);
+    return mode == "send" ? run_send(bus) : run_recv(bus, ifname);
 }

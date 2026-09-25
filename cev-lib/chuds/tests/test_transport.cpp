@@ -46,3 +46,19 @@ TEST_CASE("a transport moves a frame through the seam") {
     // consumed, so the next recv is Empty
     CHECK(t.recv() == std::unexpected(RxError::Empty));
 }
+
+TEST_CASE("is_fault separates bus problems from normal receive outcomes") {
+    CHECK(is_fault(RxError::Overflow));
+    CHECK(is_fault(RxError::BusOff));
+    CHECK(is_fault(RxError::Error));
+    CHECK_FALSE(is_fault(RxError::Empty));
+    CHECK_FALSE(is_fault(RxError::ForeignFrame));
+    CHECK_FALSE(is_fault(RxError::UnknownClass));
+    CHECK_FALSE(is_fault(RxError::BodyOverrun));
+}
+
+TEST_CASE("is_fault treats a full tx queue as retryable") {
+    CHECK(is_fault(TxError::BusOff));
+    CHECK(is_fault(TxError::Error));
+    CHECK_FALSE(is_fault(TxError::QueueFull));
+}

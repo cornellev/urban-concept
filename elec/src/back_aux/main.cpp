@@ -1,9 +1,10 @@
 #include <cstdint>
+#include <cstdio>
 #include <initializer_list>
 
 #include "chuds/chuds.hpp"
+#include "chuds/mcp_transport.hpp"
 #include "common/interval.hpp"
-#include "common/mcp_bus.hpp"
 #include "common/rpm.hpp"
 #include "config.hpp"
 #include "hardware/adc.h"
@@ -122,12 +123,15 @@ int main() {
     adc_init();
     adc_gpio_init(kBrakeAdc);
 
-    cev::McpBus bus{{.sck  = kSpiSck,
-                     .mosi = kSpiMosi,
-                     .miso = kSpiMiso,
-                     .cs   = kMcpCs,
-                     .stby = kMcpStby,
-                     .nint = kMcpInt}};
+    chuds::Bus<chuds::Mcp251863Transport> bus{chuds::Mcp251863Transport{{.sck  = kSpiSck,
+                                                                         .mosi = kSpiMosi,
+                                                                         .miso = kSpiMiso,
+                                                                         .cs   = kMcpCs,
+                                                                         .stby = kMcpStby,
+                                                                         .nint = kMcpInt}}};
+    if (!bus.ready()) {
+        std::printf("can init failed\n");
+    }
 
     // body state bits currently applied
     std::uint8_t body{};
@@ -172,7 +176,8 @@ int main() {
         if (pub.due()) {
             const cev::RpmCounts rpm = cev::rpm_take();
             adc_select_input(kBrakeChannel);
-            bus.publish(kNodeId, Telemetry{rpm.left, rpm.right, adc_read()});
+            bus.send(chuds::MsgClass::Telemetry, kNodeId, chuds::MsgType::Update,
+                     Telemetry{rpm.left, rpm.right, adc_read()});
         }
     }
 }

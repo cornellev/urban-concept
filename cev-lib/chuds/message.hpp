@@ -15,6 +15,7 @@
 
 #include "chuds/frame.hpp"
 #include "chuds/ids.hpp"
+#include "chuds/transport.hpp"
 
 namespace chuds {
 
@@ -183,43 +184,30 @@ struct StopView {
     return f;
 }
 
-// why decode rejected a frame
-enum class DecodeError : std::uint8_t {
-    // the id is past the 11-bit standard range
-    NonStandardId,
-    // the id's class is reserved
-    UnknownClass,
-    // the frame is shorter than the header or not a CAN-FD length
-    BadLength,
-    // the type byte is not a known MsgType
-    UnknownType,
-    // body_len claims more bytes than the frame carries
-    BodyOverrun,
-};
-
-[[nodiscard]] constexpr std::expected<Message, DecodeError> decode(const CanFrame& f) {
+// fails only with NonStandardId, UnknownClass, BadLength, UnknownType, or BodyOverrun
+[[nodiscard]] constexpr std::expected<Message, RxError> decode(const CanFrame& f) {
     if (!f.id.is_standard()) {
-        return std::unexpected(DecodeError::NonStandardId);
+        return std::unexpected(RxError::NonStandardId);
     }
 
     if (!is_valid(f.id.cls())) {
-        return std::unexpected(DecodeError::UnknownClass);
+        return std::unexpected(RxError::UnknownClass);
     }
 
     // ensure the frame is longer than the header length, and is actually a valid length
     if (f.len < kHeaderLen || !is_valid_fd_len(f.len)) {
-        return std::unexpected(DecodeError::BadLength);
+        return std::unexpected(RxError::BadLength);
     }
 
     if (!is_valid(frame_type(f))) {
-        return std::unexpected(DecodeError::UnknownType);
+        return std::unexpected(RxError::UnknownType);
     }
 
     const std::uint8_t body_len = frame_body_len(f);
 
     // the claimed body must fit within the frame
     if (kHeaderLen + body_len > f.len) {
-        return std::unexpected(DecodeError::BodyOverrun);
+        return std::unexpected(RxError::BodyOverrun);
     }
 
     Message m{

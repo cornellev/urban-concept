@@ -1,7 +1,9 @@
 #include <cstdint>
+#include <cstdio>
 
+#include "chuds/chuds.hpp"
+#include "chuds/mcp_transport.hpp"
 #include "common/interval.hpp"
-#include "common/mcp_bus.hpp"
 #include "config.hpp"
 #include "pico/stdlib.h"
 
@@ -16,12 +18,15 @@ int main() {
     gpio_init(kStatusLed);
     gpio_set_dir(kStatusLed, GPIO_OUT);
 
-    cev::McpBus bus{{.sck  = kSpiSck,
-                     .mosi = kSpiMosi,
-                     .miso = kSpiMiso,
-                     .cs   = kMcpCs,
-                     .stby = kMcpStby,
-                     .nint = kMcpInt}};
+    chuds::Bus<chuds::Mcp251863Transport> bus{chuds::Mcp251863Transport{{.sck  = kSpiSck,
+                                                                         .mosi = kSpiMosi,
+                                                                         .miso = kSpiMiso,
+                                                                         .cs   = kMcpCs,
+                                                                         .stby = kMcpStby,
+                                                                         .nint = kMcpInt}}};
+    if (!bus.ready()) {
+        std::printf("can init failed\n");
+    }
 
     bool led_on{};
     cev::Interval blink{kBlinkHalfPeriodMs};

@@ -30,7 +30,7 @@ enum class RxError : std::uint8_t {
     Error,
     // a classic, remote, extended, or out-of-range frame, never a chuds frame
     ForeignFrame,
-    // the frame arrived but did not decode, reported only by chuds::recv
+    // the frame arrived but did not decode, reported only by chuds::Bus::recv
     NonStandardId,
     UnknownClass,
     BadLength,
@@ -42,6 +42,35 @@ enum class RxError : std::uint8_t {
 using TxResult = std::expected<void, TxError>;
 
 using RxResult = std::expected<CanFrame, RxError>;
+
+// whether an rx error is worth reporting: the bus or driver had a problem
+// Overflow and BusOff can recover, so this does not mean stop receiving
+[[nodiscard]] constexpr bool is_fault(RxError e) {
+    switch (e) {
+        case RxError::Overflow:
+        case RxError::BusOff:
+        case RxError::Error: return true;
+        case RxError::Empty:
+        case RxError::ForeignFrame:
+        case RxError::NonStandardId:
+        case RxError::UnknownClass:
+        case RxError::BadLength:
+        case RxError::UnknownType:
+        case RxError::BodyOverrun: return false;
+    }
+    return true;
+}
+
+// whether a tx error is worth reporting
+// QueueFull only means retry later
+[[nodiscard]] constexpr bool is_fault(TxError e) {
+    switch (e) {
+        case TxError::BusOff:
+        case TxError::Error: return true;
+        case TxError::QueueFull: return false;
+    }
+    return true;
+}
 
 // the seam between chuds and a driver
 // send and recv report explicit outcomes so a dead bus is not mistaken for quiet

@@ -5,6 +5,8 @@
 #include <expected>
 
 #include "chuds/transport.hpp"
+#include "hardware/gpio.h"
+#include "hardware/spi.h"
 #include "mcp251863.h"
 
 namespace chuds {
@@ -17,26 +19,54 @@ constexpr bool timing_matches(const BitTiming& t, std::uint32_t bitrate,
            100 * (std::uint32_t{t.tseg1} + 2) == sample_point * tq_per_bit;
 }
 
-// McpBus applies these presets through init(), so they must match the chuds bus
+// the transport applies these presets through init(), so they must match the chuds bus
 static_assert(timing_matches(kBitTiming500K40MHz, kNominalBitrate, kNominalSamplePoint));
 static_assert(timing_matches(kBitTiming2M40MHz, kDataBitrate, kDataSamplePoint));
+
+// the rp2040 pins wired to an mcp251863
+struct McpPins {
+    unsigned sck;
+    unsigned mosi;
+    unsigned miso;
+    unsigned cs;
+    unsigned stby;
+    unsigned nint;
+};
 
 // a Transport over the MCP251863 CAN-FD controller
 class Mcp251863Transport {
    public:
-    // explicit constructor, taking in the controller by reference
-    // because this is just a thin adapter
-    explicit Mcp251863Transport(MCP251863& mcp) : mcp_(mcp) {}
+    // sets up the spi block and pins, then initializes the chip
+    // rp2040 spi pins alternate between spi0 and spi1 in banks of 8
+    explicit Mcp251863Transport(const McpPins& pins)
+        : spi_(spi_get_instance(pins.sck / 8 % 2)),
+          mcp_(spi_, pins.cs, pins.stby),
+          nint_(pins.nint) {
+        spi_init(spi_, MCP251863_BAUD_RATE);
+        spi_set_format(spi_, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+        gpio_set_function(pins.sck, GPIO_FUNC_SPI);
+        gpio_set_function(pins.mosi, GPIO_FUNC_SPI);
+        gpio_set_function(pins.miso, GPIO_FUNC_SPI);
 
-    // disallow move and copy ops
-    // copying the transport makes no sense, as it is bound to one controller
+        // nINT is push-pull once the mcp is up, the pull-up holds it idle until then
+        gpio_init(nint_);
+        gpio_set_dir(nint_, GPIO_IN);
+        gpio_pull_up(nint_);
+
+        init_ok_ = mcp_.init() == 1;
+    }
+
+    // a move keeps the setup already done, so a Bus can take the transport over
+    Mcp251863Transport(Mcp251863Transport&&)                 = default;
     Mcp251863Transport(const Mcp251863Transport&)            = delete;
     Mcp251863Transport& operator=(const Mcp251863Transport&) = delete;
-    Mcp251863Transport(Mcp251863Transport&&)                 = delete;
     Mcp251863Transport& operator=(Mcp251863Transport&&)      = delete;
     ~Mcp251863Transport()                                    = default;
 
     [[nodiscard]] TxResult send(const CanFrame& f) {
+        if (!init_ok_) {
+            return std::unexpected(TxError::Error);
+        }
         if (!f.id.is_standard() || !is_valid_fd_len(f.len)) {
             return std::unexpected(TxError::Error);
         }
@@ -55,7 +85,17 @@ class Mcp251863Transport {
         return std::unexpected(TxError::QueueFull);
     }
 
+    // whether the chip initialized
+    [[nodiscard]] bool ready() const { return init_ok_; }
+
     [[nodiscard]] RxResult recv() {
+        if (!init_ok_) {
+            return std::unexpected(RxError::Error);
+        }
+        // nINT stays high while no frame or overflow is pending, so skip the spi reads
+        if (gpio_get(nint_)) {
+            return std::unexpected(RxError::Empty);
+        }
         CanFdFrame cf = mcp_.read_canfd();
         if (!cf.valid) {
             // a dead bus is a fault, not a quiet one
@@ -87,7 +127,10 @@ class Mcp251863Transport {
     }
 
    private:
-    MCP251863& mcp_;
+    spi_inst_t* spi_;
+    MCP251863 mcp_;
+    unsigned nint_;
+    bool init_ok_{};
 };
 
 // assert that this meets the requirement of a Transport

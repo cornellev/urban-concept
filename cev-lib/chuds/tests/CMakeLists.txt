@@ -11,7 +11,7 @@ add_executable(chuds-tests
     test_ids.cpp
     test_message.cpp
     test_transport.cpp
-    test_io.cpp
+    test_bus.cpp
     test_catalog_format.cpp
 )
 target_link_libraries(chuds-tests PRIVATE chuds doctest::doctest)
