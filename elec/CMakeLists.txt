@@ -32,10 +32,19 @@ add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../cev-lib/chuds chuds)
 
 add_subdirectory(src/common)
 
-# fail the firmware build if target links the heap allocator
-function(forbid_heap target)
-    add_custom_command(TARGET ${target} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -DNM=${CMAKE_NM} -DELF=$<TARGET_FILE:${target}>
+# a board built from its folder's main.cpp, named after the folder so `just flash <folder>` finds it
+# arguments are extra libraries on top of board_common
+function(add_board)
+    get_filename_component(board ${CMAKE_CURRENT_SOURCE_DIR} NAME)
+    add_executable(${board} main.cpp)
+    target_compile_options(${board} PRIVATE -Wall -Wextra)
+    target_link_libraries(${board} PRIVATE board_common ${ARGN})
+    pico_enable_stdio_uart(${board} 0)
+    pico_enable_stdio_usb(${board} 1)
+    pico_add_extra_outputs(${board})
+    # fail the build if the board links the heap allocator
+    add_custom_command(TARGET ${board} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -DNM=${CMAKE_NM} -DELF=$<TARGET_FILE:${board}>
                 -P ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/cmake/forbid_heap.cmake)
 endfunction()
 

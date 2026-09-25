@@ -116,11 +116,18 @@ works out of the box. On Windows it needs a USB driver for picotool. If it says
 Each subdirectory of `src/` is an independent project with its own
 `CMakeLists.txt`. To add one
 
-- copy `src/template-project`
-- rename every `template-project` in its `CMakeLists.txt` to the new folder name, since `just flash`
-  finds the build output by folder name
-- add your source files
-- link the libraries you need.
+- copy `src/template-project` to a new folder. The folder name becomes the target name
+- write the board in `main.cpp`
+- in the board's `CMakeLists.txt`, list extra libraries in `add_board(...)` and any source files
+  besides `main.cpp` in `target_sources(...)`
 - register the folder in the firmware inventory in `elec/CMakeLists.txt`
 - compile with `just build-target {project-name}`
 - flash with `just flash {project-name}`
+
+For example, a board in `src/steering/` with `main.cpp`, `pid.cpp`, and `encoder.cpp` has this
+`src/steering/CMakeLists.txt`:
+
+```cmake
+add_board(hardware_pwm)
+target_sources(steering PRIVATE pid.cpp encoder.cpp)
+```
