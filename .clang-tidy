@@ -31,6 +31,9 @@ Checks: >
   -modernize-use-std-print,
   -clang-analyzer-core.FixedAddressDereference,
   -modernize-use-integer-sign-comparison
+# report every header except vendored code, system headers are skipped by default
+HeaderFilterRegex: '.*'
+ExcludeHeaderFilterRegex: '.*/vendor/.*'
 CheckOptions:
   # the default list minus std::expected, since Bus::send results may be ignored
   bugprone-unused-return-value.CheckedReturnTypes: '::std::error_code;::std::error_condition;::std::errc;::boost::system::error_code'

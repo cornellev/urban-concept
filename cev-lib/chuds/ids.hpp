@@ -40,7 +40,6 @@ class CanId {
     [[nodiscard]] constexpr MsgClass cls() const {
         // apply the mask first, then shift down to the low bits
         // the bits may name a reserved class, which callers reject with is_valid
-        // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
         return static_cast<MsgClass>((raw_ & kClassMask) >> kClassShift);
     }
 

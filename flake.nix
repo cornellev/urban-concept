@@ -33,6 +33,8 @@
               ninja
               just
               clang-tools
+              # only run-clang-tidy, the rest of the unwrapped clang would shadow the compiler
+              (writeShellScriptBin "run-clang-tidy" ''exec ${llvmPackages.clang-unwrapped}/bin/run-clang-tidy "$@"'')
               gh
             ];
 

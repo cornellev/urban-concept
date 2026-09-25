@@ -30,31 +30,13 @@ flash target: (build-target target)
 doctor:
     @cmake -P setup/doctor.cmake
 
-# fail if any firmware image links the heap allocator
+# clang-tidy can't find the arm headers itself, so pass the ones arm-none-eabi-g++ uses
+# nix's clang-tidy wrapper adds host headers, so use the unwrapped binary when there is one
+# lint every file the firmware build compiles, except vendored and generated code
 [unix]
-audit-heap: build
+lint: configure
     #!/usr/bin/env bash
     set -euo pipefail
-    status=0
-    for elf in build/src/*/*.elf; do
-        n=$(arm-none-eabi-nm -C "$elf" | grep -ciE '\b(malloc|free|_sbrk)\b|operator new|operator delete' || true)
-        echo "$elf: $n heap symbols"
-        [ "$n" -eq 0 ] || status=1
-    done
-    exit "$status"
-
-# run clang-tidy on the firmware and our headers
-# warnings don't fail the recipe, only errors such as a file that doesn't parse
-# clang-tidy can't query arm-none-eabi-g++, so pass its target and system headers by hand
-# the nix clang-tidy wrapper injects host headers through env vars, so prefer its unwrapped binary
-[unix]
-lint: build
-    #!/usr/bin/env bash
-    set -euo pipefail
-    args=(--extra-arg=--target=arm-none-eabi --extra-arg=-mcpu=cortex-m0plus --extra-arg=-nostdinc)
-    while read -r dir; do
-        args+=(--extra-arg=-isystem --extra-arg="$dir")
-    done < <(arm-none-eabi-g++ -xc++ -E -v /dev/null 2>&1 | sed -n '/search starts here/,/End of search/p' | grep '^ ' | sed 's/^ //')
     tidy=$(command -v clang-tidy-unwrapped || command -v clang-tidy)
-    "$tidy" -p build --quiet \
-        --header-filter='.*/(cev-lib/chuds|elec/src)/.*' "${args[@]}" $(git ls-files 'src/*.cpp')
+    includes=$(arm-none-eabi-g++ -xc++ -E -v /dev/null 2>&1 | sed -n '/search starts here/,/End of search/s|^ |-extra-arg=-isystem|p')
+    run-clang-tidy -p build -quiet -clang-tidy-binary "$tidy" $includes '^((?!/(vendor|build)/).)*$'

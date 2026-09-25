@@ -8,6 +8,7 @@
 #include "common/rpm.hpp"
 #include "config.hpp"
 #include "hardware/adc.h"
+#include "hardware/watchdog.h"
 #include "pico/stdlib.h"
 
 using namespace chuds::front_aux;
@@ -21,6 +22,9 @@ constexpr std::uint32_t kPublishPeriodMs = 100;
 constexpr std::uint32_t kCommandTimeoutMs = 1000;
 // frames handled per loop pass, the mcp rx fifo depth, so a flooded bus cannot starve the timers
 constexpr int kMaxRxPerPass = 8;
+
+// a loop pass takes microseconds, so this only trips on a real hang, well inside the 1 s timeout
+constexpr std::uint32_t kWatchdogMs = 500;
 
 namespace {
 
@@ -74,7 +78,11 @@ int main() {
     cev::Interval pub{kPublishPeriodMs};
     absolute_time_t command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
 
+    // a hung loop reboots the board instead of freezing its outputs
+    watchdog_enable(kWatchdogMs, true);
+
     while (true) {
+        watchdog_update();
         for (int i = 0; i < kMaxRxPerPass; ++i) {
             const auto rx = bus.recv();
             if (!rx) {

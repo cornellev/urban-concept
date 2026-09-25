@@ -1,12 +1,17 @@
 #include <doctest/doctest.h>
 
 #include <array>
+#include <cstdint>
 #include <expected>
 #include <optional>
 #include <type_traits>
 
 #include "chuds/bus.hpp"
 #include "chuds/catalog.hpp"
+#include "chuds/frame.hpp"
+#include "chuds/ids.hpp"
+#include "chuds/message.hpp"
+#include "chuds/transport.hpp"
 
 using namespace chuds;
 
@@ -50,6 +55,27 @@ struct NotReady {
 struct Dead {
     TxResult send(const CanFrame& /*f*/) { return std::unexpected(TxError::BusOff); }
     RxResult recv() { return std::unexpected(RxError::BusOff); }
+};
+
+// a transport that returns fixed results and counts sends
+struct Scripted {
+    TxResult tx;
+    RxResult rx;
+    int* sends;
+    [[nodiscard]] TxResult send(const CanFrame& /*f*/) const {
+        ++*sends;
+        return tx;
+    }
+    [[nodiscard]] RxResult recv() const { return rx; }
+};
+
+// a transport that is bus-off on the first recv, then healthy
+struct Recovers {
+    int calls{};
+    TxResult send(const CanFrame& /*f*/) { return {}; }
+    RxResult recv() {
+        return ++calls == 1 ? std::unexpected(RxError::BusOff) : std::unexpected(RxError::Empty);
+    }
 };
 }  // namespace
 
@@ -126,4 +152,39 @@ TEST_CASE("a bus reports a transport whose setup failed before any send or recv"
     const Bus<NotReady> bus;
     CHECK_FALSE(bus.ready());
     CHECK(bus.ok());
+}
+
+TEST_CASE("every send fault latches ok, and a full queue does not") {
+    for (const TxError e : {TxError::QueueFull, TxError::BusOff, TxError::Error}) {
+        int sends{};
+        Bus<Scripted> bus{Scripted{.tx = std::unexpected(e), .rx = {}, .sends = &sends}};
+        CHECK(bus.send(Message{}) == std::unexpected(e));
+        CHECK(bus.ok() == !is_fault(e));
+    }
+}
+
+TEST_CASE("every receive fault latches ok") {
+    for (const RxError e : {RxError::Overflow, RxError::BusOff, RxError::Error}) {
+        int sends{};
+        Bus<Scripted> bus{Scripted{.tx = {}, .rx = std::unexpected(e), .sends = &sends}};
+        CHECK(bus.recv() == std::unexpected(e));
+        CHECK_FALSE(bus.ok());
+    }
+}
+
+TEST_CASE("ok stays false after the bus recovers") {
+    Bus<Recovers> bus;
+    CHECK(bus.recv() == std::unexpected(RxError::BusOff));
+    CHECK(bus.recv() == std::unexpected(RxError::Empty));
+    CHECK(bus.send(Message{}).has_value());
+    CHECK_FALSE(bus.ok());
+}
+
+TEST_CASE("a struct send with an invalid class never reaches the transport") {
+    int sends{};
+    Bus<Scripted> bus{Scripted{.tx = {}, .rx = {}, .sends = &sends}};
+    CHECK(bus.send(static_cast<MsgClass>(3), kBodyStateId, MsgType::Update, BodyState{}) ==
+          std::unexpected(TxError::Error));
+    CHECK_FALSE(bus.ok());
+    CHECK(sends == 0);
 }

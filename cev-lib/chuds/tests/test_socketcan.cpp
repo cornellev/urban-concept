@@ -2,10 +2,12 @@
 #include <linux/can.h>
 #include <linux/can/error.h>
 #include <linux/can/raw.h>
+#include <linux/sockios.h>
 #include <net/if.h>
-#include <poll.h>
 #include <sys/ioctl.h>
+#include <sys/poll.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <array>
@@ -14,9 +16,15 @@
 #include <cstdlib>
 #include <cstring>
 #include <expected>
+#include <string_view>
+#include <utility>
 
+#include "chuds/bus.hpp"
+#include "chuds/frame.hpp"
+#include "chuds/ids.hpp"
 #include "chuds/message.hpp"
 #include "chuds/socketcan_transport.hpp"  // IWYU pragma: keep
+#include "chuds/transport.hpp"
 
 using namespace chuds;
 
@@ -123,6 +131,42 @@ TEST_CASE("opening a nonexistent interface fails") {
     SocketCanTransport t;
     CHECK_FALSE(t.open("nosuchcan0"));
     CHECK_FALSE(t.is_open());
+}
+
+TEST_CASE("opening an interface name too long for the kernel fails") {
+    SocketCanTransport t;
+    std::array<char, IFNAMSIZ> name{};
+    name.fill('a');
+    CHECK_FALSE(t.open(std::string_view(name.data(), name.size())));
+    CHECK_FALSE(t.is_open());
+}
+
+TEST_CASE("a move hands over the socket and leaves the source closed") {
+    SocketCanTransport a;
+    if (skip_without_can(a.open(test_if()))) {
+        return;
+    }
+    SocketCanTransport b{std::move(a)};
+    // the test checks the moved-from state on purpose
+    // NOLINTNEXTLINE(bugprone-use-after-move,clang-analyzer-cplusplus.Move)
+    CHECK_FALSE(a.is_open());
+    CHECK(b.is_open());
+
+    SocketCanTransport c;
+    c = std::move(b);
+    // the test checks the moved-from state on purpose
+    // NOLINTNEXTLINE(bugprone-use-after-move,clang-analyzer-cplusplus.Move)
+    CHECK_FALSE(b.is_open());
+    CHECK(c.is_open());
+    CHECK(c.recv() == std::unexpected(RxError::Empty));
+}
+
+TEST_CASE("a bus forwards open and wait to its socketcan transport") {
+    Bus<SocketCanTransport> bus;
+    if (skip_without_can(bus.open(test_if()))) {
+        return;
+    }
+    CHECK_FALSE(bus.wait(std::chrono::milliseconds{20}));
 }
 
 TEST_CASE("round-trips a chuds message over a CAN-FD interface") {
@@ -294,5 +338,31 @@ TEST_CASE("a bus-off error frame holds BusOff until a restart") {
         r = t.recv();
     }
     CHECK(r == std::unexpected(RxError::Empty));
+    ::close(raw);
+}
+
+TEST_CASE("any data frame clears bus-off, since a bus-off controller receives nothing") {
+    SocketCanTransport t;
+    if (skip_without_can(t.open(test_if()))) {
+        return;
+    }
+    const int raw = open_raw(true);
+    REQUIRE(raw >= 0);
+    canfd_frame err{};
+    err.can_id = CAN_ERR_FLAG | CAN_ERR_BUSOFF;
+    err.len    = CAN_ERR_DLC;
+    REQUIRE(::write(raw, &err, CAN_MTU) == static_cast<ssize_t>(CAN_MTU));
+    CHECK(recv_wait(t) == std::unexpected(RxError::BusOff));
+
+    canfd_frame data{};
+    data.can_id = 0x123;
+    data.len    = 8;
+    REQUIRE(::write(raw, &data, sizeof(data)) == static_cast<ssize_t>(sizeof(data)));
+    CHECK(recv_wait(t).has_value());
+
+    CanFrame f{};
+    f.id  = CanId::from_raw(0x123);
+    f.len = 2;
+    CHECK(t.send(f).has_value());
     ::close(raw);
 }

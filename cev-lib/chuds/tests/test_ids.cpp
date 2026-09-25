@@ -33,3 +33,18 @@ TEST_CASE("priority order: emergency beats command beats telemetry") {
 TEST_CASE("every id stays within the 11-bit standard range") {
     CHECK(CanId(MsgClass::Telemetry, 0xFF) <= kMaxStandardId);
 }
+
+TEST_CASE("the top standard id decodes to a reserved class") {
+    const CanId top = CanId::from_raw(0x7FF);
+    CHECK(top.is_standard());
+    CHECK(top.subaddress() == 0xFF);
+    CHECK_FALSE(is_valid(top.cls()));
+    CHECK_FALSE(CanId::from_raw(0x800).is_standard());
+}
+
+TEST_CASE("only the three defined classes are valid") {
+    CHECK(is_valid(MsgClass::Emergency));
+    CHECK(is_valid(MsgClass::Command));
+    CHECK(is_valid(MsgClass::Telemetry));
+    CHECK_FALSE(is_valid(static_cast<MsgClass>(3)));
+}

@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
+#include <climits>
 #include <expected>
 #include <string_view>
 
@@ -126,7 +127,9 @@ class SocketCanTransport {
             return false;
         }
         pollfd p{.fd = fd_, .events = POLLIN, .revents = 0};
-        return ::poll(&p, 1, static_cast<int>(timeout.count())) > 0;
+        // poll takes an int, and a negative timeout would block forever
+        const auto ms = std::clamp<std::chrono::milliseconds::rep>(timeout.count(), 0, INT_MAX);
+        return ::poll(&p, 1, static_cast<int>(ms)) > 0;
     }
 
     [[nodiscard]] TxResult send(const CanFrame& f) const {

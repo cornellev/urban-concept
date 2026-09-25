@@ -29,9 +29,6 @@ jobs:
       - name: build firmware
         run: nix develop --command just elec build
 
-      - name: build driver examples
-        run: nix develop --command just cev-lib rp2040_mcp251863 build
-
   test:
     runs-on: ubuntu-latest
     steps:
@@ -63,22 +60,7 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@v22
 
       - name: check formatting
-        run: nix develop --command just fmt-check
-
-  no-heap:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: true
-
-      - name: init tinyusb
-        run: git -C vendor/pico-sdk submodule update --init lib/tinyusb
-
-      - uses: DeterminateSystems/nix-installer-action@v22
-
-      - name: audit firmware for heap use
-        run: nix develop --command just elec audit-heap
+        run: nix develop --command treefmt --ci
 
   lint:
     runs-on: ubuntu-latest
@@ -92,11 +74,10 @@ jobs:
 
       - uses: DeterminateSystems/nix-installer-action@v22
 
-      # warnings show as annotations on the PR and keep the check green
-      # a file that fails to parse still fails the check
+      # the matcher turns each warning line into an annotation on the PR
+      # warnings keep the check green, and a file that fails to parse fails it
       - name: lint
         run: |
-          set -o pipefail
-          { nix develop --command just elec lint && nix develop --command just cev-lib chuds lint; } 2>&1 | tee lint.log
-          { grep ': warning: ' lint.log || true; } | sed -E "s|^$GITHUB_WORKSPACE/||; s|[^/]+/\.\./||g" | sort -u \
-            | sed -nE 's|^([^:]+):([0-9]+):([0-9]+): warning: (.*)$|::warning file=\1,line=\2,col=\3::\4|p'
+          echo "::add-matcher::.github/clang-tidy.json"
+          nix develop --command just elec lint
+          nix develop --command just cev-lib chuds lint

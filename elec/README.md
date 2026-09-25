@@ -3,6 +3,7 @@
 This folder holds the firmware for the car's RP2040 boards.
 
 Each board has its own program in its own folder under `src/` (for example `template-project`).
+`src/common/` holds code shared by all boards.
 
 The Pico SDK is vendored at the repo root in `vendor/pico-sdk/` as a git submodule.
 
@@ -19,13 +20,13 @@ The Pico SDK is vendored at the repo root in `vendor/pico-sdk/` as a git submodu
   ```powershell
   powershell -ExecutionPolicy Bypass -File setup/setup-windows.ps1
   ```
-  It installs anything missing (CMake, Ninja, Just, the GitHub CLI, Python, and the arm compiler) and downloads picotool. Windows may pop up permission windows during installs. click yes for all of them.
+  It installs anything missing (CMake, Ninja, Just, the GitHub CLI, and Python) with `winget`, and downloads the arm compiler and picotool. Windows may pop up permission windows during installs. click yes for all of them.
 - Close and open a new terminal, because PATH may not be updated yet.
 
 ### macOS
 
 - Install [Homebrew](https://brew.sh) if you don't have it
-- cd to the `elec/ folder`:
+- cd to the `elec/` folder:
   ```sh
   cd /path/to/urban-concept/elec
   ```
@@ -45,7 +46,8 @@ The Pico SDK is vendored at the repo root in `vendor/pico-sdk/` as a git submodu
   - Python 3
   - the arm compiler (`arm-none-eabi-gcc`) 15.3, from [Arm](https://gitlab.arm.com/tooling/gnu-toolchains-for-arm)
   - picotool 2.3
-- Run `just doctor` from the `elec/` folder to check them
+- Run `just doctor` from the `elec/` folder. It checks the arm compiler and picotool versions, and
+  that CMake, Ninja, and Python are installed
 
 ### Nix
 
@@ -115,7 +117,8 @@ Each subdirectory of `src/` is an independent project with its own
 `CMakeLists.txt`. To add one
 
 - copy `src/template-project`
-- rename the target in its `CMakeLists.txt`
+- rename every `template-project` in its `CMakeLists.txt` to the new folder name, since `just flash`
+  finds the build output by folder name
 - add your source files
 - link the libraries you need.
 - register the folder in the firmware inventory in `elec/CMakeLists.txt`

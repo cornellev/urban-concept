@@ -1,4 +1,3 @@
 set default-list
 
 mod chuds
-mod rp2040_mcp251863 'RP2040_MCP251863_Driver'

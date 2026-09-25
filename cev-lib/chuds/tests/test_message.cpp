@@ -1,16 +1,30 @@
 #include <doctest/doctest.h>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <expected>
+#include <span>
 #include <string_view>
 #include <utility>
 
 #include "chuds/catalog.hpp"
+#include "chuds/frame.hpp"
+#include "chuds/ids.hpp"
 #include "chuds/message.hpp"
+#include "chuds/transport.hpp"
 
 using namespace chuds;
 
 namespace {
+// true when read_stop accepts an argument of type M
+template <class M>
+concept CanReadStop = requires(M&& m) { read_stop(std::forward<M>(m)); };
+
+// a temporary message would leave the detail span dangling, so it must not compile
+static_assert(CanReadStop<const Message&>);
+static_assert(!CanReadStop<Message>);
+
 struct WheelSpeed {
     std::uint16_t rpm;
     static constexpr bool chuds_wire_body = true;
@@ -139,6 +153,18 @@ TEST_CASE("make_stop truncates an over-long detail but still transmits") {
     CHECK(view->detail.size() == kMaxBody - 1);
 }
 
+TEST_CASE("make_stop fills the body exactly at the detail limit") {
+    for (const std::size_t len : {kMaxBody - 1, kMaxBody}) {
+        std::array<char, kMaxBody> detail{};
+        detail.fill('y');
+        const auto stop = make_stop(0, 0x12, std::string_view(detail.data(), len));
+        CHECK(stop.body_len == kMaxBody);
+        const auto view = read_stop(stop);
+        REQUIRE(view.has_value());
+        CHECK(view->detail.size() == kMaxBody - 1);
+    }
+}
+
 TEST_CASE("make_stop with an empty detail carries only the sender") {
     const auto stop = make_stop(1, 0x12, "");
     CHECK(stop.body_len == 1);
@@ -152,6 +178,13 @@ TEST_CASE("make_stop with an empty detail carries only the sender") {
 TEST_CASE("read_stop rejects a STOP with no sender byte") {
     const Message m{.cls = MsgClass::Emergency, .type = MsgType::Stop};
     CHECK_FALSE(read_stop(m).has_value());
+}
+
+TEST_CASE("read_stop needs both the emergency class and the stop type") {
+    const Message wrong_type{.cls = MsgClass::Emergency, .type = MsgType::Update, .body_len = 1};
+    CHECK_FALSE(read_stop(wrong_type).has_value());
+    const Message wrong_class{.cls = MsgClass::Telemetry, .type = MsgType::Stop, .body_len = 1};
+    CHECK_FALSE(read_stop(wrong_class).has_value());
 }
 
 TEST_CASE("read_stop rejects a message that is not a STOP") {
@@ -189,45 +222,87 @@ TEST_CASE("make_message rejects an invalid class or type") {
     CHECK_FALSE(make_message(MsgClass::Telemetry, 0, static_cast<MsgType>(5), body).has_value());
 }
 
+TEST_CASE("encode rejects an invalid class or type") {
+    const Message bad_class{.cls = static_cast<MsgClass>(3)};
+    CHECK_FALSE(encode(bad_class).has_value());
+    const Message bad_type{.type = static_cast<MsgType>(5)};
+    CHECK_FALSE(encode(bad_type).has_value());
+}
+
+TEST_CASE("a full 62-byte body fills a 64-byte frame and comes back whole") {
+    Message m{.cls = MsgClass::Telemetry, .subaddress = 0x10, .type = MsgType::Update};
+    m.body.fill(0x5A);
+    m.body_len   = kMaxBody;
+    const auto f = encode(m);
+    REQUIRE(f.has_value());
+    CHECK(f->len == kMaxFdPayload);
+    const auto back = decode(*f);
+    REQUIRE(back.has_value());
+    CHECK(back->body_len == kMaxBody);
+    CHECK(back->body[kMaxBody - 1] == 0x5A);
+}
+
+TEST_CASE("a 64-byte frame claiming a 63-byte body is an overrun") {
+    CanFrame f{};
+    f.id      = CanId(MsgClass::Telemetry, 0x10);
+    f.data[1] = kMaxBody + 1;
+    f.len     = kMaxFdPayload;
+    CHECK(decode(f) == std::unexpected(RxError::BodyOverrun));
+}
+
+TEST_CASE("CAN-FD lengths round up at each size boundary") {
+    CHECK(round_up_fd_length(0) == 0);
+    CHECK(round_up_fd_length(8) == 8);
+    CHECK(round_up_fd_length(9) == 12);
+    CHECK(round_up_fd_length(12) == 12);
+    CHECK(round_up_fd_length(13) == 16);
+    CHECK(round_up_fd_length(48) == 48);
+    CHECK(round_up_fd_length(49) == 64);
+    CHECK(round_up_fd_length(64) == 64);
+    CHECK(is_valid_fd_len(64));
+    CHECK_FALSE(is_valid_fd_len(13));
+    CHECK_FALSE(is_valid_fd_len(65));
+}
+
 TEST_CASE("a frame shorter than the header is malformed") {
     const CanFrame f{.len = 1};
-    CHECK(decode(f).error() == RxError::BadLength);
+    CHECK(decode(f) == std::unexpected(RxError::BadLength));
 }
 
 TEST_CASE("a length byte larger than the frame is rejected") {
     CanFrame f{};
     f.data[1] = 20;  // claims 20 body bytes
     f.len     = 4;   // but only 2 are present
-    CHECK(decode(f).error() == RxError::BodyOverrun);
+    CHECK(decode(f) == std::unexpected(RxError::BodyOverrun));
 }
 
 TEST_CASE("decode rejects an id outside the 11-bit standard range") {
     CanFrame f{};
     f.id  = CanId::from_raw(0x800);  // would otherwise alias to Emergency/STOP via the class mask
     f.len = 2;
-    CHECK(decode(f).error() == RxError::NonStandardId);
+    CHECK(decode(f) == std::unexpected(RxError::NonStandardId));
 }
 
 TEST_CASE("decode rejects a reserved class") {
     CanFrame f{};
     f.id  = CanId::from_raw(0x300);
     f.len = 2;
-    CHECK(decode(f).error() == RxError::UnknownClass);
+    CHECK(decode(f) == std::unexpected(RxError::UnknownClass));
 }
 
 TEST_CASE("decode rejects an unknown type byte") {
     CanFrame f{};
     f.data[0] = 5;
     f.len     = 2;
-    CHECK(decode(f).error() == RxError::UnknownType);
+    CHECK(decode(f) == std::unexpected(RxError::UnknownType));
 }
 
 TEST_CASE("decode rejects a len that is not a CAN-FD size") {
     CanFrame f{};
     f.len = 9;
-    CHECK(decode(f).error() == RxError::BadLength);
+    CHECK(decode(f) == std::unexpected(RxError::BadLength));
     f.len = 13;
-    CHECK(decode(f).error() == RxError::BadLength);
+    CHECK(decode(f) == std::unexpected(RxError::BadLength));
 }
 
 TEST_CASE("body_view clamps a corrupt body_len instead of reading out of bounds") {
@@ -240,7 +315,7 @@ TEST_CASE("decode rejects a nonsensical len past the FD payload size") {
     CanFrame f{};
     f.data[1] = 4;
     f.len     = 255;
-    CHECK(decode(f).error() == RxError::BadLength);
+    CHECK(decode(f) == std::unexpected(RxError::BadLength));
 }
 
 TEST_CASE("a struct body round-trips through make_message and body_as") {
@@ -262,6 +337,14 @@ TEST_CASE("body_as rejects a size mismatch") {
                                 std::span<const std::uint8_t>(one));
     REQUIRE(m.has_value());
     CHECK_FALSE(body_as<WheelSpeed>(*m).has_value());  // body is 1 byte, wants 2
+}
+
+TEST_CASE("body_as rejects a body larger than the struct") {
+    const std::array<std::uint8_t, 3> three{0x01, 0x02, 0x03};
+    const auto m = make_message(MsgClass::Telemetry, 0x10, MsgType::Update,
+                                std::span<const std::uint8_t>(three));
+    REQUIRE(m.has_value());
+    CHECK_FALSE(body_as<WheelSpeed>(*m).has_value());
 }
 
 TEST_CASE("struct make_message and body_as are constexpr") {

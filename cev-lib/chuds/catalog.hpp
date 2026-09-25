@@ -33,9 +33,9 @@ constexpr std::uint8_t kNodeId = 0x10;
 
 // telemetry body, published once per cycle
 struct Telemetry {
-    std::uint16_t rpm_left;   // wheel edges in the last window
-    std::uint16_t rpm_right;  // wheel edges in the last window
-    std::uint16_t steering;   // raw adc, 0-4095
+    std::uint16_t rpm_left{};   // wheel edges in the last window
+    std::uint16_t rpm_right{};  // wheel edges in the last window
+    std::uint16_t steering{};   // raw adc, 0-4095
     static constexpr bool chuds_wire_body = true;
 };
 static_assert(sizeof(Telemetry) == 6);
@@ -49,9 +49,9 @@ constexpr std::uint8_t kNodeId = 0x20;
 
 // telemetry body, published once per cycle
 struct Telemetry {
-    std::uint16_t rpm_left;   // wheel edges in the last window
-    std::uint16_t rpm_right;  // wheel edges in the last window
-    std::uint16_t brake;      // raw adc, 0-4095
+    std::uint16_t rpm_left{};   // wheel edges in the last window
+    std::uint16_t rpm_right{};  // wheel edges in the last window
+    std::uint16_t brake{};      // raw adc, 0-4095
     static constexpr bool chuds_wire_body = true;
 };
 static_assert(sizeof(Telemetry) == 6);
@@ -65,10 +65,10 @@ constexpr std::uint8_t kNodeId = 0x30;
 
 // telemetry body, published every report period
 struct Telemetry {
-    float voltage;  // bus volts, averaged over the report period
-    float current;  // bus amps, averaged over the report period
-    float power;    // watts, averaged over the report period
-    float energy;   // joules since boot
+    float voltage{};  // bus volts, averaged over the report period
+    float current{};  // bus amps, averaged over the report period
+    float power{};    // watts, averaged over the report period
+    float energy{};   // joules since boot
     static constexpr bool chuds_wire_body = true;
 };
 static_assert(sizeof(Telemetry) == 16);

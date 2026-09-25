@@ -53,7 +53,10 @@ TEST_CASE("is_fault separates bus problems from normal receive outcomes") {
     CHECK(is_fault(RxError::Error));
     CHECK_FALSE(is_fault(RxError::Empty));
     CHECK_FALSE(is_fault(RxError::ForeignFrame));
+    CHECK_FALSE(is_fault(RxError::NonStandardId));
     CHECK_FALSE(is_fault(RxError::UnknownClass));
+    CHECK_FALSE(is_fault(RxError::BadLength));
+    CHECK_FALSE(is_fault(RxError::UnknownType));
     CHECK_FALSE(is_fault(RxError::BodyOverrun));
 }
 

@@ -13,3 +13,4 @@ pico_enable_stdio_uart(joulemeter 0)
 pico_enable_stdio_usb(joulemeter 1)
 
 pico_add_extra_outputs(joulemeter)
+forbid_heap(joulemeter)

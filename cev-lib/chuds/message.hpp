@@ -164,6 +164,9 @@ struct StopView {
     return s;
 }
 
+// the detail span points into m, so a temporary message would leave it dangling
+std::optional<StopView> read_stop(const Message&& m) = delete;
+
 // id = class + subaddress, payload = [type][body_len][body...]
 [[nodiscard]] constexpr std::optional<CanFrame> encode(const Message& m) {
     if (!is_valid(m.cls) || !is_valid(m.type) || m.body_len > kMaxBody) {

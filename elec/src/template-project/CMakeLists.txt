@@ -13,3 +13,4 @@ pico_enable_stdio_uart(template-project 0)
 pico_enable_stdio_usb(template-project 1)
 
 pico_add_extra_outputs(template-project)
+forbid_heap(template-project)

@@ -15,18 +15,21 @@ order.
 | Telemetry | `2`   | `0x200-0x2FF` | source node id           |
 | Reserved  | `3-7` | `0x300-0x7FF` | future classes           |
 
-- Frames in the reserved range, and extended 29-bit frames, are rejected on receive.
+- The transports reject extended 29-bit, remote, and classic CAN frames (`ForeignFrame`).
+- `decode` rejects reserved classes (`UnknownClass`), bad lengths, unknown types, and bodies that
+  overrun the frame.
 - The bus is CHUDS-only. There is no magic byte, so any 11-bit CAN-FD frame with a plausible
   header decodes as CHUDS.
 
 ## Classes
 
-- **Emergency:** broadcast, and every node acts on it. The subaddress is the severity, so `0x000`,
-  the most severe STOP, wins every arbitration. A STOP body is `[sender id][detail]`. Only the VCU
-  sends STOP, because CAN allows one transmitter per id. A node reports a fault to the VCU
-  instead. This is the software stop. The hardwired e-stop works without any bus.
-- **Command:** from the VCU to the nodes. The subaddress is the recipient node id. The low
-  subaddresses are reserved for broadcasts. The one broadcast today is `BodyState` at `0x108`.
+- **Emergency:** broadcast, and every node with outputs acts on it. The subaddress is the
+  severity, so `0x000`, the most severe STOP, wins every arbitration. A STOP body is
+  `[sender id][detail]`. Only the VCU sends STOP, because CAN allows one transmitter per id. A node
+  reports a fault to the VCU instead. This is the software stop. The hardwired e-stop works without
+  any bus.
+- **Command:** from the VCU to the nodes. The subaddress is the recipient node id. A broadcast
+  uses a subaddress no node owns. The one broadcast today is `BodyState` at `0x108`.
 - **Telemetry:** each node publishes under its own subaddress, and any consumer filters for it.
 
 ## Assigning subaddresses
@@ -49,7 +52,7 @@ The CAN-FD data field is `[type][body_len][body...]`:
 
 | Id      | Meaning                                                          |
 | ------- | ---------------------------------------------------------------- |
-| `0x000` | most severe STOP, every node halts                               |
+| `0x000` | most severe STOP, every node with outputs goes to safe states    |
 | `0x108` | `BodyState` broadcast: turn signals, headlights, horn, wiper     |
 | `0x140` | command to node `0x40`, such as an `Update` with a throttle body |
 | `0x210` | telemetry from node `0x10` (front_aux)                           |

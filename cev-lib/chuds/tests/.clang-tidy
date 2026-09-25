@@ -5,7 +5,6 @@
 InheritParentConfig: true
 Checks: >
   -bugprone-unchecked-optional-access,
-  -misc-include-cleaner,
   -clang-analyzer-optin.core.EnumCastOutOfRange,
   -readability-function-cognitive-complexity,
   -cppcoreguidelines-pro-type-union-access,

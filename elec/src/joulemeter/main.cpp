@@ -63,11 +63,10 @@ int main() {
     double joules{};
     // energy at the last report
     double report_joules{};
-    // sums over the current report period
+    // time-weighted sums over the current report period, so a slow loop pass counts for its length
     double period_s{};
     double v_sum{};
     double i_sum{};
-    std::uint32_t n{};
     absolute_time_t prev = get_absolute_time();
     cev::Interval report{kReportPeriodMs};
 
@@ -82,12 +81,12 @@ int main() {
         prev            = now;
         joules += static_cast<double>(v_bus * amps) * dt;
         period_s += dt;
-        v_sum += v_bus;
-        i_sum += amps;
-        ++n;
+        v_sum += static_cast<double>(v_bus) * dt;
+        i_sum += static_cast<double>(amps) * dt;
 
         if (report.due()) {
-            const Telemetry t{static_cast<float>(v_sum / n), static_cast<float>(i_sum / n),
+            const Telemetry t{static_cast<float>(v_sum / period_s),
+                              static_cast<float>(i_sum / period_s),
                               static_cast<float>((joules - report_joules) / period_s),
                               static_cast<float>(joules)};
             bus.send(chuds::MsgClass::Telemetry, kNodeId, chuds::MsgType::Update, t);
@@ -97,7 +96,6 @@ int main() {
             period_s      = 0;
             v_sum         = 0;
             i_sum         = 0;
-            n             = 0;
         }
     }
 }

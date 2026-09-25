@@ -12,7 +12,12 @@ namespace chuds {
 // write one readable line for m into out, truncated to fit
 // returns the length snprintf would have written
 inline int format_message(const Message& m, std::span<char> out) {
-    if (m.cls == MsgClass::Command && m.subaddress == kBodyStateId) {
+    if (const auto s = read_stop(m)) {
+        return std::snprintf(out.data(), out.size(), "stop severity %d from 0x%02x", s->severity,
+                             s->sender);
+    }
+    // boards act on a body state only when it is an Update, so print it only then
+    if (m.cls == MsgClass::Command && m.subaddress == kBodyStateId && m.type == MsgType::Update) {
         if (const auto s = body_as<BodyState>(m)) {
             return std::snprintf(out.data(), out.size(), "body state 0x%02x", s->bits);
         }

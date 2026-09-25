@@ -52,7 +52,7 @@ Things the code doesn't say:
   `chuds::is_fault()` is true only for real problems such as bus-off.
 - `body_as<T>` checks only the body size, so match the class and subaddress first.
 - On the VCU, `bus.open("can0")` connects the transport and `bus.wait(timeout)` blocks until a
-  frame arrives. Boards have neither, since they poll the chip each loop pass.
+  frame arrives. Boards have neither: a board that takes commands polls the chip each loop pass.
 
 ## Files
 
@@ -74,11 +74,17 @@ and the rules for body structs are in [`docs/serialization.md`](docs/serializati
 
 ## Build
 
+Run these from `cev-lib/chuds/`, or prefix them with `cev-lib chuds` from the repo root
+(`just cev-lib chuds test`):
+
 ```sh
 just build     # configure + build
 just test      # + run the doctest suite
 just clean
 ```
+
+The SocketCAN tests skip when `vcan0` is missing. Set `CHUDS_REQUIRE_CAN=1` to make that a
+failure instead, as CI does.
 
 The demo needs Linux and a virtual CAN interface:
 
@@ -94,8 +100,9 @@ sudo ip link add dev vcan0 type vcan && sudo ip link set vcan0 mtu 72 && sudo ip
 **Provisional until the team ratifies the id table.**
 
 Each node owns one subaddress and publishes its telemetry at `0x2NN`. The VCU broadcasts the car's
-body outputs as one `BodyState` bitmask on `0x108`, resent on change and periodically, and each
-node drives only the outputs it has.
+body outputs as one `BodyState` bitmask on `0x108`, and each node drives only the outputs it has.
+The VCU must resend it on change and well within every second, since boards fall back to safe
+states after 1 s without one.
 
 | Node       | Subaddress | Telemetry (`0x2NN`)             | Drives from `BodyState`    |
 | ---------- | ---------- | ------------------------------- | -------------------------- |

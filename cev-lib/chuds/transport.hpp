@@ -30,7 +30,7 @@ enum class RxError : std::uint8_t {
     Error,
     // a classic, remote, extended, or out-of-range frame, never a chuds frame
     ForeignFrame,
-    // the frame arrived but did not decode, reported only by chuds::Bus::recv
+    // the frame arrived but did not decode, reported by decode and chuds::Bus::recv
     NonStandardId,
     UnknownClass,
     BadLength,

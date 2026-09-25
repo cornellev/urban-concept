@@ -33,5 +33,3 @@ config.dataBitTiming = kBitTiming2M40MHz;
 ```
 
 Use `getStatus()` for controller-wide interrupt, bus error, error counter, bus-off, and SPI CRC status. Use `getFIFOStatus(fifo)` for FIFO full/empty, RX overflow, TX attempts exhausted, arbitration lost, aborted, and TX error flags.
-
-Minimal validation examples live in `examples/canfd_tx_example.cpp` and `examples/canfd_rx_example.cpp`.

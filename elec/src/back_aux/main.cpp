@@ -10,6 +10,7 @@
 #include "hardware/adc.h"
 #include "hardware/clocks.h"
 #include "hardware/pwm.h"
+#include "hardware/watchdog.h"
 #include "pico/stdlib.h"
 
 using namespace chuds::back_aux;
@@ -23,6 +24,9 @@ constexpr std::uint32_t kPublishPeriodMs = 100;
 constexpr std::uint32_t kCommandTimeoutMs = 1000;
 // frames handled per loop pass, the mcp rx fifo depth, so a flooded bus cannot starve the timers
 constexpr int kMaxRxPerPass = 8;
+
+// a loop pass takes microseconds, so this only trips on a real hang, well inside the 1 s timeout
+constexpr std::uint32_t kWatchdogMs = 500;
 
 // servo pwm at 50 hz
 // the center pulse, and the half-span at full deflection
@@ -102,8 +106,9 @@ void init_outputs() {
     const unsigned slice = pwm_gpio_to_slice_num(kWiperPwm);
     pwm_set_clkdiv(slice, static_cast<float>(clock_get_hz(clk_sys)) / 1'000'000.0f);
     pwm_set_wrap(slice, 19999);
-    pwm_set_enabled(slice, true);
+    // set the park pulse before enabling, so the servo never sees a stray first frame
     set_wiper_deg(kWiperParkDeg);
+    pwm_set_enabled(slice, true);
 }
 
 // drive this node's outputs from body state bits
@@ -148,7 +153,11 @@ int main() {
     cev::Interval wiper_iv{kWiperTickMs};
     absolute_time_t command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
 
+    // a hung loop reboots the board instead of freezing its outputs
+    watchdog_enable(kWatchdogMs, true);
+
     while (true) {
+        watchdog_update();
         for (int i = 0; i < kMaxRxPerPass; ++i) {
             const auto rx = bus.recv();
             if (!rx) {

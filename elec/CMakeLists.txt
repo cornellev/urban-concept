@@ -32,6 +32,13 @@ add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../cev-lib/chuds chuds)
 
 add_subdirectory(src/common)
 
+# fail the firmware build if target links the heap allocator
+function(forbid_heap target)
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -DNM=${CMAKE_NM} -DELF=$<TARGET_FILE:${target}>
+                -P ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/cmake/forbid_heap.cmake)
+endfunction()
+
 # firmware inventory; add a board with an explicit line
 add_subdirectory(src/front_aux)
 add_subdirectory(src/back_aux)
