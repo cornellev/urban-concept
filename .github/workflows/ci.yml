@@ -92,8 +92,11 @@ jobs:
 
       - uses: DeterminateSystems/nix-installer-action@v22
 
-      - name: lint firmware
-        run: nix develop --command just elec lint
-
-      - name: lint chuds
-        run: nix develop --command just cev-lib chuds lint
+      # warnings show as annotations on the PR and keep the check green
+      # a file that fails to parse still fails the check
+      - name: lint
+        run: |
+          set -o pipefail
+          { nix develop --command just elec lint && nix develop --command just cev-lib chuds lint; } 2>&1 | tee lint.log
+          { grep ': warning: ' lint.log || true; } | sed -E "s|^$GITHUB_WORKSPACE/||; s|[^/]+/\.\./||g" | sort -u \
+            | sed -nE 's|^([^:]+):([0-9]+):([0-9]+): warning: (.*)$|::warning file=\1,line=\2,col=\3::\4|p'

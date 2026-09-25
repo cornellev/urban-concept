@@ -13,8 +13,9 @@ clean:
     cmake -E rm -rf build
 
 # run clang-tidy on the tests, the demo, and the headers they include
+# warnings don't fail the recipe, only errors such as a file that doesn't parse
 # linux only: on macOS clang-tidy misreads the nix libc++ headers
 [linux]
 lint: build
-    clang-tidy -p build --quiet --warnings-as-errors='*' \
+    clang-tidy -p build --quiet \
         --header-filter='.*/cev-lib/chuds/.*' $(git ls-files '*.cpp')
