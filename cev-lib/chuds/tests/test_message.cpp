@@ -179,7 +179,7 @@ TEST_CASE("an over-long body is rejected on build and encode") {
     const std::array<std::uint8_t, kMaxBody + 1> big{};
     CHECK_FALSE(make_message(MsgClass::Telemetry, 0, MsgType::Update, big).has_value());
 
-    Message m{.body_len = kMaxBody + 1};
+    const Message m{.body_len = kMaxBody + 1};
     CHECK_FALSE(encode(m).has_value());
 }
 
@@ -190,7 +190,7 @@ TEST_CASE("make_message rejects an invalid class or type") {
 }
 
 TEST_CASE("a frame shorter than the header is malformed") {
-    CanFrame f{.len = 1};
+    const CanFrame f{.len = 1};
     CHECK(decode(f).error() == RxError::BadLength);
 }
 

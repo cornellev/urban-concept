@@ -11,3 +11,10 @@ test: build
 
 clean:
     cmake -E rm -rf build
+
+# run clang-tidy on the tests, the demo, and the headers they include
+# linux only: on macOS clang-tidy misreads the nix libc++ headers
+[linux]
+lint: build
+    clang-tidy -p build --quiet --warnings-as-errors='*' \
+        --header-filter='.*/cev-lib/chuds/.*' $(git ls-files '*.cpp')

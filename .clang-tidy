@@ -1,4 +1,5 @@
 ---
+# the rp2040 reaches its registers through fixed addresses, so that analyzer check is noise
 Checks: >
   readability-*,
   cppcoreguidelines-*,
@@ -26,7 +27,8 @@ Checks: >
   -readability-implicit-bool-conversion,
   -readability-convert-member-functions-to-static,
   -cppcoreguidelines-avoid-non-const-global-variables,
-  -modernize-use-std-print
+  -modernize-use-std-print,
+  -clang-analyzer-core.FixedAddressDereference
 CheckOptions:
   # the default list minus std::expected, since Bus::send results may be ignored
   bugprone-unused-return-value.CheckedReturnTypes: '::std::error_code;::std::error_condition;::std::errc;::boost::system::error_code'

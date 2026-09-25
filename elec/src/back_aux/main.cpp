@@ -87,7 +87,7 @@ void wiper_tick(Wiper& w) {
 }
 
 void init_outputs() {
-    for (unsigned pin : {kTurnLeft, kTurnRight}) {
+    for (const unsigned pin : {kTurnLeft, kTurnRight}) {
         gpio_init(pin);
         gpio_set_dir(pin, GPIO_OUT);
         gpio_put(pin, false);

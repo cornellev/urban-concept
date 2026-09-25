@@ -28,7 +28,7 @@ inline void rpm_on_edge(unsigned gpio, std::uint32_t /*events*/) {
 inline void rpm_init(unsigned left_pin, unsigned right_pin) {
     g_rpm_left_pin  = left_pin;
     g_rpm_right_pin = right_pin;
-    for (unsigned pin : {left_pin, right_pin}) {
+    for (const unsigned pin : {left_pin, right_pin}) {
         gpio_init(pin);
         gpio_set_dir(pin, GPIO_IN);
         gpio_disable_pulls(pin);

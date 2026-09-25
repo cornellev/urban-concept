@@ -1,4 +1,4 @@
-name: build
+name: ci
 
 on:
   push:
@@ -14,7 +14,6 @@ concurrency:
 
 jobs:
   build:
-    name: build and test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -25,9 +24,76 @@ jobs:
       - name: init tinyusb
         run: git -C vendor/pico-sdk submodule update --init lib/tinyusb
 
-      - name: install nix
-        uses: DeterminateSystems/nix-installer-action@v22
+      - uses: DeterminateSystems/nix-installer-action@v22
 
-      # same targets as `just check` locally (telem/shm needs a pi with pigpio)
-      - name: build and test
-        run: nix develop --command just check
+      - name: build firmware
+        run: nix develop --command just elec build
+
+      - name: build driver examples
+        run: nix develop --command just cev-lib rp2040_mcp251863 build
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # a virtual CAN interface for the socketcan tests
+      - name: set up vcan0
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq linux-modules-extra-$(uname -r)
+          sudo modprobe vcan
+          sudo ip link add dev vcan0 type vcan
+          sudo ip link set vcan0 mtu 72
+          sudo ip link set up vcan0
+
+      - uses: DeterminateSystems/nix-installer-action@v22
+
+      # fail instead of skipping if vcan0 is missing
+      - name: test chuds
+        run: nix develop --command just cev-lib chuds test
+        env:
+          CHUDS_REQUIRE_CAN: 1
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: DeterminateSystems/nix-installer-action@v22
+
+      - name: check formatting
+        run: nix develop --command just fmt-check
+
+  no-heap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: init tinyusb
+        run: git -C vendor/pico-sdk submodule update --init lib/tinyusb
+
+      - uses: DeterminateSystems/nix-installer-action@v22
+
+      - name: audit firmware for heap use
+        run: nix develop --command just elec audit-heap
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: init tinyusb
+        run: git -C vendor/pico-sdk submodule update --init lib/tinyusb
+
+      - uses: DeterminateSystems/nix-installer-action@v22
+
+      - name: lint firmware
+        run: nix develop --command just elec lint
+
+      - name: lint chuds
+        run: nix develop --command just cev-lib chuds lint

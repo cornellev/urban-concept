@@ -25,7 +25,7 @@ constexpr int kMaxRxPerPass = 8;
 namespace {
 
 void init_outputs() {
-    for (unsigned pin : {kTurnLeft, kTurnRight, kHeadlightL, kHeadlightR, kHorn}) {
+    for (const unsigned pin : {kTurnLeft, kTurnRight, kHeadlightL, kHeadlightR, kHorn}) {
         gpio_init(pin);
         gpio_set_dir(pin, GPIO_OUT);
         gpio_put(pin, false);

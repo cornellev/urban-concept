@@ -123,7 +123,7 @@ TEST_CASE("a message that cannot be encoded is an Error and a fault") {
 }
 
 TEST_CASE("a bus reports a transport whose setup failed before any send or recv") {
-    Bus<NotReady> bus;
+    const Bus<NotReady> bus;
     CHECK_FALSE(bus.ready());
     CHECK(bus.ok());
 }
