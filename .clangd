@@ -1,2 +1,7 @@
 Diagnostics:
   UnusedIncludes: Strict
+  # pico-sdk umbrella headers are intentional; don't flag them unused
+  Includes:
+    IgnoreHeader:
+      - pico/.*
+      - hardware/.*

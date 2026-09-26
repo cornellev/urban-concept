@@ -1,25 +1,83 @@
-name: compile firmware
+name: ci
 
 on:
   push:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  firmware:
-    name: build firmware
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          submodules: recursive
+          submodules: true
 
-      - name: install nix
-        uses: DeterminateSystems/nix-installer-action@v22
+      # the build needs only tinyusb from pico-sdk's submodules
+      - name: init tinyusb
+        run: git -C vendor/pico-sdk submodule update --init lib/tinyusb
 
-      - name: build all firmware
-        run: nix develop --command just elec build-all
+      - uses: DeterminateSystems/nix-installer-action@v22
+
+      - name: build firmware
+        run: nix develop --command just elec build
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # a virtual CAN interface for the socketcan tests
+      - name: set up vcan0
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq linux-modules-extra-$(uname -r)
+          sudo modprobe vcan
+          sudo ip link add dev vcan0 type vcan
+          sudo ip link set vcan0 mtu 72
+          sudo ip link set up vcan0
+
+      - uses: DeterminateSystems/nix-installer-action@v22
+
+      # fail instead of skipping if vcan0 is missing
+      - name: test chuds
+        run: nix develop --command just cev-lib chuds test
+        env:
+          CHUDS_REQUIRE_CAN: 1
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: DeterminateSystems/nix-installer-action@v22
+
+      - name: check formatting
+        run: nix develop --command treefmt --ci
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: init tinyusb
+        run: git -C vendor/pico-sdk submodule update --init lib/tinyusb
+
+      - uses: DeterminateSystems/nix-installer-action@v22
+
+      # the matcher turns each warning line into an annotation on the PR
+      # warnings keep the check green, and a file that fails to parse fails it
+      - name: lint
+        run: |
+          echo "::add-matcher::.github/clang-tidy.json"
+          nix develop --command just elec lint
+          nix develop --command just cev-lib chuds lint

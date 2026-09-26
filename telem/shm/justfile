@@ -1,0 +1,18 @@
+set default-list
+
+configure:
+    cmake -S . -B build -G Ninja
+
+build: configure
+    cmake --build build
+
+# run the shm writer (on the pi)
+run: build
+    ./build/write_shm
+
+# run the shm reader (on the pi)
+read:
+    python3 read_shm.py
+
+clean:
+    cmake -E rm -rf build

@@ -33,10 +33,12 @@
               ninja
               just
               clang-tools
+              # only run-clang-tidy, the rest of the unwrapped clang would shadow the compiler
+              (writeShellScriptBin "run-clang-tidy" ''exec ${llvmPackages.clang-unwrapped}/bin/run-clang-tidy "$@"'')
               gh
             ];
 
-            # pico-sdk is vendored at elec/pico-sdk
+            # pico-sdk is vendored at vendor/pico-sdk
             CMAKE_PREFIX_PATH = "${pkgs.picotool}";
             CMAKE_EXPORT_COMPILE_COMMANDS = "1";
             CMAKE_GENERATOR = "Ninja";
@@ -45,7 +47,7 @@
           treefmt = {
             projectRootFile = "flake.nix";
             settings.global.excludes = [
-              "elec/pico-sdk/**"
+              "vendor/pico-sdk/**"
               "**/build/**"
             ];
             programs = {

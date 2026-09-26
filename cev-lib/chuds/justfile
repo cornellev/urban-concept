@@ -1,0 +1,21 @@
+set default-list
+
+# use powershell on windows
+set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
+
+configure:
+    cmake -S . -B build -G Ninja
+
+build: configure
+    cmake --build build
+
+test: build
+    ctest --test-dir build --output-on-failure
+
+clean:
+    cmake -E rm -rf build
+
+# lint every file the build compiles, except fetched and generated code
+[unix]
+lint: configure
+    run-clang-tidy -p build -quiet '^((?!/build/).)*$'

@@ -1,34 +1,42 @@
-# recipes default to sh, which windows lacks; use powershell there
-set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
+set default-list
 
-# on windows, point cmake at the prebuilt picotool that setup fetched
-# elsewhere the flake supplies it via CMAKE_PREFIX_PATH
-picotool_flag := if os() == "windows" { '-Dpicotool_DIR="' + replace(module_directory() / ".tools" / "picotool", "\\", "/") + '"' } else { "" }
+# use powershell on windows
+set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
 
 # picotool: bundled binary on windows, on PATH elsewhere
 picotool := if os() == "windows" { '& "' + replace(module_directory() / ".tools" / "picotool" / "picotool.exe", "\\", "/") + '"' } else { "picotool" }
 
-# expected toolchain versions; match the flake (arm-gcc) and the pico-sdk submodule (picotool)
-# update only on a deliberate toolchain bump
-arm_gcc_expected := "15.3"
-picotool_expected := "2.3.0"
-
+# configure all targets
 configure:
-    cmake -S . -B build -G Ninja {{ picotool_flag }}
+    cmake -S . -B build -G Ninja
 
-build-all: configure
+# build all targets
+build: configure
     cmake --build build
 
-build target: configure
+# build a single target
+build-target target: configure
     cmake --build build --target {{ target }}
 
+# clean build artifacts
 clean:
     cmake -E rm -rf build
 
-# flash a project onto a pico held in BOOTSEL mode
-flash target: (build target)
+# flash a project onto a pico
+flash target: (build-target target)
     {{ picotool }} load -x build/src/{{ target }}/{{ target }}.uf2
 
-# report installed toolchain versions against the expected pinned ones
+# ensure installed toolchain versions are as expected
 doctor:
-    @cmake -DARM_GCC_EXPECTED="{{ arm_gcc_expected }}" -DPICOTOOL_EXPECTED="{{ picotool_expected }}" -DTOOLS_DIR="{{ replace(module_directory() / ".tools", "\\", "/") }}" -P setup/doctor.cmake
+    @cmake -P setup/doctor.cmake
+
+# clang-tidy can't find the arm headers itself, so pass the ones arm-none-eabi-g++ uses
+# nix's clang-tidy wrapper adds host headers, so use the unwrapped binary when there is one
+# lint every file the firmware build compiles, except vendored and generated code
+[unix]
+lint: configure
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tidy=$(command -v clang-tidy-unwrapped || command -v clang-tidy)
+    includes=$(arm-none-eabi-g++ -xc++ -E -v /dev/null 2>&1 | sed -n '/search starts here/,/End of search/s|^ |-extra-arg=-isystem|p')
+    run-clang-tidy -p build -quiet -clang-tidy-binary "$tidy" $includes '^((?!/(vendor|build)/).)*$'
