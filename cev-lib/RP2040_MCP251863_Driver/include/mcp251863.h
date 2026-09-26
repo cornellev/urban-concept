@@ -248,6 +248,8 @@ class MCP251863 {
     int writeAddr(uint16_t startAddr, const uint8_t* data, size_t len);
     uint32_t readReg32(uint16_t addr);
     int writeReg32(uint16_t addr, uint32_t value);
+    // poll one register byte until its masked bits equal value, giving up after about 100 ms
+    int waitForByte(uint16_t addr, uint8_t mask, uint8_t value);
 
     int initGeneralPurposeFifo(uint8_t fifoNum, FifoMode fifoMode, PayloadSize plSize,
                                uint8_t fSize, uint8_t prioNum, TxRetransmitMode retranMode,

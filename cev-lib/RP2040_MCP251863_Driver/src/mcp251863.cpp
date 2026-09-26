@@ -316,6 +316,18 @@ int MCP251863::writeReg32(uint16_t addr, uint32_t value) {
     return writeAddr(addr, buff, 4);
 }
 
+int MCP251863::waitForByte(uint16_t addr, uint8_t mask, uint8_t value) {
+    for (int i = 0; i < 100; i++) {
+        uint8_t buff{};
+        readAddr(addr, &buff, 1);
+        if ((buff & mask) == value) {
+            return 1;
+        }
+        sleep_ms(1);
+    }
+    return 0;
+}
+
 int MCP251863::init() { return init(default_init_config()); }
 
 int MCP251863::init(const InitConfig& config) {
@@ -345,15 +357,8 @@ int MCP251863::init(const InitConfig& config) {
     sleep_ms(10);
 
     // Wait for oscillator stability before touching CAN timing.
-    for (int i = 0; i < 100; i++) {
-        readAddr(std::to_underlying(RegisterAddress::REG_MCP_OSC) + 1, &one, 1);
-        if ((one & (1 << 2)) != 0) {
-            break;
-        }
-        sleep_ms(1);
-        if (i == 99) {
-            return 0;
-        }
+    if (!waitForByte(std::to_underlying(RegisterAddress::REG_MCP_OSC) + 1, 1 << 2, 1 << 2)) {
+        return 0;
     }
 
     if (!setControllerMode(ControllerMode::CMODE_MCP_CONF)) {
@@ -362,29 +367,13 @@ int MCP251863::init(const InitConfig& config) {
 
     const uint8_t osc = (config.enablePll ? 0x01 : 0x00) | (config.sclkDiv2 ? 0x10 : 0x00);
     writeAddr(std::to_underlying(RegisterAddress::REG_MCP_OSC), &osc, 1);
-    if (config.enablePll) {
-        for (int i = 0; i < 100; i++) {
-            readAddr(std::to_underlying(RegisterAddress::REG_MCP_OSC) + 1, &one, 1);
-            if ((one & 0x01) != 0) {
-                break;
-            }
-            sleep_ms(1);
-            if (i == 99) {
-                return 0;
-            }
-        }
+    if (config.enablePll &&
+        !waitForByte(std::to_underlying(RegisterAddress::REG_MCP_OSC) + 1, 0x01, 0x01)) {
+        return 0;
     }
-    if (config.sclkDiv2) {
-        for (int i = 0; i < 100; i++) {
-            readAddr(std::to_underlying(RegisterAddress::REG_MCP_OSC) + 1, &one, 1);
-            if ((one & (1 << 4)) != 0) {
-                break;
-            }
-            sleep_ms(1);
-            if (i == 99) {
-                return 0;
-            }
-        }
+    if (config.sclkDiv2 &&
+        !waitForByte(std::to_underlying(RegisterAddress::REG_MCP_OSC) + 1, 1 << 4, 1 << 4)) {
+        return 0;
     }
 
     if (!setBitTiming(config.nominalBitTiming, config.dataBitTiming)) {
@@ -444,15 +433,8 @@ int MCP251863::init(const InitConfig& config) {
         return 0;
     }
 
-    for (int i = 0; i < 100; i++) {
-        readAddr(std::to_underlying(RegisterAddress::REG_MCP_C1CON) + 2, &one, 1);
-        if ((one >> 5) == std::to_underlying(ControllerMode::CMODE_MCP_CFD_NORM)) {
-            return 1;
-        }
-        sleep_ms(1);
-    }
-
-    return 0;
+    return waitForByte(std::to_underlying(RegisterAddress::REG_MCP_C1CON) + 2, 0b11100000,
+                       std::to_underlying(ControllerMode::CMODE_MCP_CFD_NORM) << 5);
 }
 
 int MCP251863::setBitTiming(BitTiming nominalTiming, BitTiming dataTiming) {
@@ -520,9 +502,9 @@ int MCP251863::initTransmitEventFifo(uint8_t fSize, const FifoInterruptFlag* int
     }
 
     // wait for reset bit to clear
-    do {
-        readAddr(addr + 1, buff, 1);
-    } while ((buff[0] >> 2) == 1);
+    if (!waitForByte(addr + 1, 1 << 2, 0)) {
+        return 0;
+    }
 
     // set bytes
     buff[0] = 0b00000000 | intFlags;
@@ -547,9 +529,9 @@ int MCP251863::initTransmitQueue(PayloadSize plSize, uint8_t fSize, uint8_t prio
     }
 
     // wait for reset bit to clear
-    do {
-        readAddr(addr + 1, buff, 1);
-    } while ((buff[0] >> 2) == 1);
+    if (!waitForByte(addr + 1, 1 << 2, 0)) {
+        return 0;
+    }
 
     // set bytes
     buff[0] = 0b00000000 | intFlags;
@@ -795,9 +777,10 @@ int MCP251863::setControllerMode(ControllerMode contMode) {
         buff1 = (buff1 & 0b11111000) | std::to_underlying(ControllerMode::CMODE_MCP_CONF);
         writeAddr(addr + 3, &buff1, 1);
 
-        do {
-            readAddr(addr + 2, &buff0, 1);
-        } while ((buff0 >> 5) != std::to_underlying(ControllerMode::CMODE_MCP_CONF));
+        if (!waitForByte(addr + 2, 0b11100000,
+                         std::to_underlying(ControllerMode::CMODE_MCP_CONF) << 5)) {
+            return 0;
+        }
     }
 
     // write intended contMode
