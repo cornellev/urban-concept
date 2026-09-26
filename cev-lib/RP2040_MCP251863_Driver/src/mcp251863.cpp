@@ -612,26 +612,9 @@ int MCP251863::pushTXFIFO(uint8_t fifoNum, const uint8_t* data, size_t pSize) {
     // write message to addr
     writeAddr(message_addr, data, pSize);
 
-    // increment pointer
-    buff = 0b00000001;
+    // UINC queues the frame and TXREQ asks the chip to send it, in one write
+    buff = 0b00000011;
     writeAddr(fifo_addr + 1, &buff, 1);
-
-    return 1;
-}
-
-int MCP251863::reqSendTXFIFO(uint8_t fifoNum) {
-    const uint16_t addr =
-        std::to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * (fifoNum - 1);
-    uint8_t buff{};
-
-    // dont know if this is needed, but wait until the fifo increments
-    do {
-        readAddr(addr + 1, &buff, 1);
-    } while ((buff & 0b00000001) == 1);
-
-    // set bit to request txfifo send
-    buff = 0b00000010;
-    writeAddr(addr + 1, &buff, 1);
 
     return 1;
 }
@@ -701,10 +684,7 @@ int MCP251863::send_frame(uint8_t fifoNum, const CanFdFrame& frame) {
     if (!create_message_obj(message, frame, &objectSize)) {
         return 0;
     }
-    if (!pushTXFIFO(fifoNum, message, objectSize)) {
-        return 0;
-    }
-    return reqSendTXFIFO(fifoNum);
+    return pushTXFIFO(fifoNum, message, objectSize);
 }
 
 CanFdFrame MCP251863::read_canfd() { return read_frame(rxFifoNum_); }

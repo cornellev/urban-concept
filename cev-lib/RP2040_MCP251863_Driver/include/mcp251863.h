@@ -260,7 +260,6 @@ class MCP251863 {
                           size_t intFlagSize);
 
     int pushTXFIFO(uint8_t fifoNum, const uint8_t* data, size_t pSize);
-    int reqSendTXFIFO(uint8_t fifoNum);
     int popRXFIFO(uint8_t fifoNum, uint8_t* dst, size_t pSize);
 
     int setControllerMode(ControllerMode mode);
