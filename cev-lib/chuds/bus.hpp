@@ -14,7 +14,7 @@ namespace chuds {
 // mirrors RxResult one level up
 using RecvResult = std::expected<Message, RxError>;
 
-// sends and receives chuds messages over a transport it owns, and tracks faults
+// sends and receives chuds messages over a transport it owns
 template <Transport T>
 class Bus {
    public:
@@ -30,14 +30,14 @@ class Bus {
     Bus& operator=(Bus&&)      = delete;
     ~Bus()                     = default;
 
-    // faults are tracked in ok(), so the result may be ignored
+    // periodic messages may ignore the result, since the next send replaces a lost one
+    // one-shot commands such as STOP should check it and retry on QueueFull
     TxResult send(const Message& m) {
-        const auto f     = encode(m);
-        const TxResult r = f ? t_.send(*f) : TxResult{std::unexpected(TxError::Error)};
-        if (!r && is_fault(r.error())) {
-            ok_ = false;
+        const auto f = encode(m);
+        if (!f) {
+            return std::unexpected(TxError::Error);
         }
-        return r;
+        return t_.send(*f);
     }
 
     // build a message from a struct body and send it
@@ -45,7 +45,6 @@ class Bus {
     TxResult send(MsgClass cls, std::uint8_t subaddress, MsgType type, const Body& body) {
         const auto m = make_message(cls, subaddress, type, body);
         if (!m) {
-            ok_ = false;
             return std::unexpected(TxError::Error);
         }
         return send(*m);
@@ -56,16 +55,10 @@ class Bus {
     [[nodiscard]] RecvResult recv() {
         const auto r = t_.recv();
         if (!r) {
-            if (is_fault(r.error())) {
-                ok_ = false;
-            }
             return std::unexpected(r.error());
         }
         return decode(*r);
     }
-
-    // true until the first fault, then false for good, even if the bus recovers
-    [[nodiscard]] bool ok() const { return ok_; }
 
     // open the transport by interface name, only for transports that have open()
     [[nodiscard]] bool open(std::string_view ifname)
@@ -88,9 +81,15 @@ class Bus {
         return t_.ready();
     }
 
+    // the controller's error state, only for transports that report it
+    [[nodiscard]] BusStatus status()
+        requires requires(T& t) { t.status(); }
+    {
+        return t_.status();
+    }
+
    private:
-    T t_;
-    bool ok_{true};
+    T t_{};
 };
 
 }  // namespace chuds

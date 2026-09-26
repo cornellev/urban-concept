@@ -72,6 +72,24 @@ using RxResult = std::expected<CanFrame, RxError>;
     return true;
 }
 
+// the controller's standing on the bus, set by its own error counters
+enum class BusState : std::uint8_t {
+    // normal operation
+    Active,
+    // many recent errors, it still sends but no longer flags other nodes' errors
+    Passive,
+    // too many transmit errors, it has left the bus until it recovers
+    Off,
+};
+
+// the controller's error state right now
+// a node alone on the bus goes passive, with tx_errors climbing, because nothing acknowledges it
+struct BusStatus {
+    BusState state{};
+    std::uint8_t tx_errors{};
+    std::uint8_t rx_errors{};
+};
+
 // the interface between chuds and a driver
 // send and recv report explicit outcomes so a dead bus is not mistaken for quiet
 template <typename T>

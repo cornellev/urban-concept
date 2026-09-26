@@ -53,17 +53,22 @@ Things the code doesn't say:
 - `body_as<T>` checks only the body size, so match the class and subaddress first.
 - On the VCU, `bus.open("can0")` connects the transport and `bus.wait(timeout)` blocks until a
   frame arrives. Boards have neither: a board that takes commands polls the chip each loop pass.
+- A periodic `send()` may ignore its result, since the next send replaces a lost one. A one-shot
+  command such as STOP should check it.
+- On a board, `bus.status()` reads the controller's error state: `Active`, `Passive`, or `Off`,
+  plus its error counters. `cev::CanHealth` in `elec/src/common` prints it once a second while it
+  is not `Active`. On the VCU, `ip -details -statistics link show can0` shows the same.
 
 ## Files
 
 | File                      | What it holds                                                 |
 | ------------------------- | ------------------------------------------------------------- |
 | `chuds.hpp`               | includes everything below except the two transports           |
-| `bus.hpp`                 | `Bus<T>`: send, recv, and fault tracking                      |
+| `bus.hpp`                 | `Bus<T>`: send, recv, and the controller's status             |
 | `catalog.hpp`             | the car's node ids and message bodies                         |
 | `catalog_format.hpp`      | `format_message`, `print_message`                             |
 | `message.hpp`             | `Message`, `encode`/`decode`, `make_message<T>`, `body_as<T>` |
-| `transport.hpp`           | the `Transport` concept, `TxError`, `RxError`, `is_fault()`   |
+| `transport.hpp`           | the `Transport` concept, errors, `is_fault()`, `BusStatus`    |
 | `frame.hpp`               | `CanFrame` and the bus settings                               |
 | `ids.hpp`                 | `CanId`: class and subaddress                                 |
 | `mcp_transport.hpp`       | `Mcp251863Transport`, RP2040 only                             |

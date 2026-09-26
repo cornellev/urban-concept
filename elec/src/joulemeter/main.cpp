@@ -3,6 +3,7 @@
 
 #include "chuds/chuds.hpp"
 #include "chuds/mcp_transport.hpp"
+#include "common/can_health.hpp"
 #include "common/interval.hpp"
 #include "config.hpp"
 #include "hardware/adc.h"
@@ -69,8 +70,10 @@ int main() {
     double i_sum{};
     absolute_time_t prev = get_absolute_time();
     cev::Interval report{kReportPeriodMs};
+    cev::CanHealth can_health;
 
     while (true) {
+        can_health.check(bus);
         const float v_bus = raw_to_volts(read_raw(kVoltageAdc)) * kVoltageDividerRatio;
         const float amps =
             (raw_to_volts(read_raw(kCurrentAdc)) - kCurrentZeroVolts) / kCurrentVoltsPerAmp;

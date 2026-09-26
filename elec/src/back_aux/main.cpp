@@ -4,6 +4,7 @@
 
 #include "chuds/chuds.hpp"
 #include "chuds/mcp_transport.hpp"
+#include "common/can_health.hpp"
 #include "common/interval.hpp"
 #include "common/rpm.hpp"
 #include "config.hpp"
@@ -151,6 +152,7 @@ int main() {
     bool stopped{};
     cev::Interval pub{kPublishPeriodMs};
     cev::Interval wiper_iv{kWiperTickMs};
+    cev::CanHealth can_health;
     absolute_time_t command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
 
     // a hung loop reboots the board instead of freezing its outputs
@@ -158,6 +160,7 @@ int main() {
 
     while (true) {
         watchdog_update();
+        can_health.check(bus);
         for (int i = 0; i < kMaxRxPerPass; ++i) {
             const auto rx = bus.recv();
             if (!rx) {

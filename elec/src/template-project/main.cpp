@@ -3,6 +3,7 @@
 
 #include "chuds/chuds.hpp"
 #include "chuds/mcp_transport.hpp"
+#include "common/can_health.hpp"
 #include "common/interval.hpp"
 #include "config.hpp"
 #include "pico/stdlib.h"
@@ -33,8 +34,10 @@ int main() {
 
     bool led_on{};
     cev::Interval blink{kBlinkHalfPeriodMs};
+    cev::CanHealth can_health;
 
     while (true) {
+        can_health.check(bus);
         for (int i = 0; i < kMaxRxPerPass; ++i) {
             const auto rx = bus.recv();
             if (!rx) {

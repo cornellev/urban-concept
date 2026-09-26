@@ -90,6 +90,22 @@ class Mcp251863Transport {
     // whether the chip initialized
     [[nodiscard]] bool ready() const { return init_ok_; }
 
+    // the chip's error state, read over spi
+    // a chip that failed init is not on the bus, so it reports Off
+    [[nodiscard]] BusStatus status() {
+        if (!init_ok_) {
+            return {.state = BusState::Off};
+        }
+        const Status s = mcp_.getStatus();
+        BusState state = BusState::Active;
+        if (s.bus_off) {
+            state = BusState::Off;
+        } else if (s.tx_error_passive || s.rx_error_passive) {
+            state = BusState::Passive;
+        }
+        return {.state = state, .tx_errors = s.tx_error_count, .rx_errors = s.rx_error_count};
+    }
+
     [[nodiscard]] RxResult recv() {
         if (!init_ok_) {
             return std::unexpected(RxError::Error);
