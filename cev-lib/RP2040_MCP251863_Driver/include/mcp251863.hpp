@@ -1,8 +1,9 @@
-#ifndef MCP251863_H
-#define MCP251863_H
+#pragma once
 
 #include <stdlib.h>
 #include <string.h>
+
+#include <optional>
 
 #include "hardware/spi.h"
 #include "pico/stdlib.h"
@@ -112,6 +113,18 @@ enum class PayloadSize : uint8_t {
     PL_SIZE_MCP_64 = 0b1111
 };
 
+// slot size of a fifo, the PLSIZE field, a different encoding from a frame's dlc
+enum class FifoPayloadSize : uint8_t {
+    FIFO_PLSIZE_8  = 0b000,
+    FIFO_PLSIZE_12 = 0b001,
+    FIFO_PLSIZE_16 = 0b010,
+    FIFO_PLSIZE_20 = 0b011,
+    FIFO_PLSIZE_24 = 0b100,
+    FIFO_PLSIZE_32 = 0b101,
+    FIFO_PLSIZE_48 = 0b110,
+    FIFO_PLSIZE_64 = 0b111
+};
+
 enum class InterruptEnable : uint32_t {
     INT_EN_MCP_TXIF     = 0b00000000000000000000000000000001,
     INT_EN_MCP_RXIF     = 0b00000000000000000000000000000010,
@@ -182,8 +195,8 @@ struct InitConfig {
     uint8_t rxFifo;         // RX FIFO number (1-31, must differ from txFifo)
     uint8_t txFifoDepth;    // TX FIFO depth (1-32 messages)
     uint8_t rxFifoDepth;    // RX FIFO depth (1-32 messages)
-    PayloadSize txPayloadSize;
-    PayloadSize rxPayloadSize;
+    FifoPayloadSize txPayloadSize;
+    FifoPayloadSize rxPayloadSize;
     BitTiming nominalBitTiming;
     BitTiming dataBitTiming;
 };
@@ -250,14 +263,16 @@ class MCP251863 {
     int writeReg32(uint16_t addr, uint32_t value);
     // poll one register byte until its masked bits equal value, giving up after about 100 ms
     int waitForByte(uint16_t addr, uint8_t mask, uint8_t value);
+    // absolute ram address of a fifo's next message, or nullopt if objectSize would run past ram
+    std::optional<uint16_t> readMessageAddr(uint16_t fifoPointAddr, size_t objectSize);
 
-    int initGeneralPurposeFifo(uint8_t fifoNum, FifoMode fifoMode, PayloadSize plSize,
+    int initGeneralPurposeFifo(uint8_t fifoNum, FifoMode fifoMode, FifoPayloadSize plSize,
                                uint8_t fSize, uint8_t prioNum, TxRetransmitMode retranMode,
                                const FifoInterruptFlag* intFlagArray, size_t intFlagSize);
 
     int initTransmitEventFifo(uint8_t fSize, const FifoInterruptFlag* intFlagArray,
                               size_t intFlagSize);
-    int initTransmitQueue(PayloadSize plSize, uint8_t fSize, uint8_t prioNum,
+    int initTransmitQueue(FifoPayloadSize plSize, uint8_t fSize, uint8_t prioNum,
                           TxRetransmitMode retranMode, const FifoInterruptFlag* intFlagArray,
                           size_t intFlagSize);
 
@@ -331,5 +346,3 @@ class MCP251863 {
     [[nodiscard]] uint8_t getTxFifoNum() const { return txFifoNum_; }
     [[nodiscard]] uint8_t getRxFifoNum() const { return rxFifoNum_; }
 };
-
-#endif

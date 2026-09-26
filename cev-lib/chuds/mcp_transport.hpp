@@ -7,7 +7,7 @@
 #include "chuds/transport.hpp"
 #include "hardware/gpio.h"
 #include "hardware/spi.h"
-#include "mcp251863.h"
+#include "mcp251863.hpp"
 
 namespace chuds {
 

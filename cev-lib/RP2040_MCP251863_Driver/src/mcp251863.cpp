@@ -1,4 +1,4 @@
-#include "mcp251863.h"
+#include "mcp251863.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -82,7 +82,7 @@ uint32_t encode_tdc(bool enable, uint8_t offset) {
     }
 
     // 10 at bits 17:16 for TDCMOD auto
-    // TDCO at bits 14:6
+    // TDCO at bits 14:8
     return (2UL << 16) | ((offset & 0x7F) << 8);
 }
 
@@ -92,16 +92,17 @@ InitConfig default_init_config() {
         .sclkDiv2          = 0,
         .enableTdc         = 1,
         .rxTimestampEnable = 0,
-        .tdcOffset         = 6,
-        .txFifo            = 1,
-        .rxFifo            = 2,
+        // (DTSEG1 + 1) tq, microchip's value for a 40 MHz clock at 2 Mbit/s
+        .tdcOffset = 15,
+        .txFifo    = 1,
+        .rxFifo    = 2,
         // FIFO depth is the number of message slots, 1..32
         // FSIZE register field stores it as 0..31
         // we subtract 1 from fsize at call sites
         .txFifoDepth   = 8,
         .rxFifoDepth   = 8,
-        .txPayloadSize = PayloadSize::PL_SIZE_MCP_64,
-        .rxPayloadSize = PayloadSize::PL_SIZE_MCP_64,
+        .txPayloadSize = FifoPayloadSize::FIFO_PLSIZE_64,
+        .rxPayloadSize = FifoPayloadSize::FIFO_PLSIZE_64,
         // Defaults assume a 40 MHz CAN clock: nominal 500 kbit/s, data 2 Mbit/s.
         .nominalBitTiming = kBitTiming500K40MHz,
         .dataBitTiming    = kBitTiming2M40MHz,
@@ -316,6 +317,15 @@ int MCP251863::writeReg32(uint16_t addr, uint32_t value) {
     return writeAddr(addr, buff, 4);
 }
 
+std::optional<uint16_t> MCP251863::readMessageAddr(uint16_t fifoPointAddr, size_t objectSize) {
+    // the user address is an offset into the 2 KB message ram at 0x400
+    const auto ua = static_cast<uint16_t>(readReg32(fifoPointAddr) & 0xFFF);
+    if (ua + objectSize > 0x800) {
+        return std::nullopt;
+    }
+    return ua + 0x400;
+}
+
 int MCP251863::waitForByte(uint16_t addr, uint8_t mask, uint8_t value) {
     for (int i = 0; i < 100; i++) {
         uint8_t buff{};
@@ -468,7 +478,7 @@ int MCP251863::reset() {
     return 1;
 }
 
-int MCP251863::initGeneralPurposeFifo(uint8_t fifoNum, FifoMode fifoMode, PayloadSize plSize,
+int MCP251863::initGeneralPurposeFifo(uint8_t fifoNum, FifoMode fifoMode, FifoPayloadSize plSize,
                                       uint8_t fSize, uint8_t prioNum, TxRetransmitMode retranMode,
                                       const FifoInterruptFlag* intFlagArray, size_t intFlagSize) {
     uint8_t buff[4];
@@ -485,7 +495,7 @@ int MCP251863::initGeneralPurposeFifo(uint8_t fifoNum, FifoMode fifoMode, Payloa
     // assumes prioNum <= 32
     buff[2] = 0b00000000 | (std::to_underlying(retranMode) << 5) | prioNum;
     // FSIZE stores depth-1 (ie 0 = 1 message; 31 = 32 messages), but the caller passes 1..32
-    buff[3] = ((std::to_underlying(plSize) & 0b111) << 5) | ((fSize - 1) & 0x1F);
+    buff[3] = (std::to_underlying(plSize) << 5) | ((fSize - 1) & 0x1F);
 
     writeAddr(addr, buff, 4);
     return 1;
@@ -517,7 +527,7 @@ int MCP251863::initTransmitEventFifo(uint8_t fSize, const FifoInterruptFlag* int
     return 1;
 }
 
-int MCP251863::initTransmitQueue(PayloadSize plSize, uint8_t fSize, uint8_t prioNum,
+int MCP251863::initTransmitQueue(FifoPayloadSize plSize, uint8_t fSize, uint8_t prioNum,
                                  TxRetransmitMode retranMode, const FifoInterruptFlag* intFlagArray,
                                  size_t intFlagSize) {
     uint8_t buff[4];
@@ -539,7 +549,7 @@ int MCP251863::initTransmitQueue(PayloadSize plSize, uint8_t fSize, uint8_t prio
     // assumes prioNum <= 32
     buff[2] = 0b00000000 | (std::to_underlying(retranMode) << 5) | prioNum;
     // FSIZE stores depth-1 (ie 0 = 1 message; 31 = 32 messages), but the caller passes 1..32
-    buff[3] = ((std::to_underlying(plSize) & 0b111) << 5) | ((fSize - 1) & 0x1F);
+    buff[3] = (std::to_underlying(plSize) << 5) | ((fSize - 1) & 0x1F);
 
     writeAddr(addr, buff, 4);
     return 1;
@@ -552,22 +562,21 @@ int MCP251863::initFilter(uint8_t fltNum, uint8_t fifoNum, uint16_t canSID) {
     const uint16_t flt_addr = std::to_underlying(RegisterAddress::REG_MCP_C1FLTCONx) + fltNum;
     const uint16_t flt_obj_addr =
         std::to_underlying(RegisterAddress::REG_MCP_C1FLTOBJx) + 8 * fltNum;
+    const uint16_t flt_mask_addr =
+        std::to_underlying(RegisterAddress::REG_MCP_C1MASKx) + 8 * fltNum;
 
-    uint8_t buff[4];
+    // the chip ignores filter object and mask writes while the filter is enabled
+    const uint8_t disabled = 0;
+    writeAddr(flt_addr, &disabled, 1);
 
-    // enable filter, assumes fifoNum <= 32
-    buff[0] = 0b00000000 | fifoNum | (1 << 7);
-    writeAddr(flt_addr, buff, 1);
+    // SID[10:0] in C1FLTOBJn bits 10:0
+    writeReg32(flt_obj_addr, canSID & 0x7FF);
+    // MIDE limits matches to standard ids, and every MSID bit must match
+    writeReg32(flt_mask_addr, (1UL << 30) | 0x7FF);
 
-    // Pack SID[10:0] (and SID11 in bit 11) into C1FLTOBJn bits [11:0]
-    buff[0] = canSID & 0xFF;
-    buff[1] = (canSID >> 8) & 0x0F;
-    buff[2] = 0x00;
-    buff[3] = 0x00;
-
-    writeAddr(flt_obj_addr, buff, 4);
-
-    return 1;
+    // enable, routing matches to fifoNum
+    const uint8_t enabled = (1 << 7) | (fifoNum & 0x1F);
+    return writeAddr(flt_addr, &enabled, 1);
 }
 
 int MCP251863::pushTXFIFO(uint8_t fifoNum, const uint8_t* data, size_t pSize) {
@@ -579,7 +588,6 @@ int MCP251863::pushTXFIFO(uint8_t fifoNum, const uint8_t* data, size_t pSize) {
         std::to_underlying(RegisterAddress::REG_MCP_C1FIFOUAx) + 12 * (fifoNum - 1);
 
     uint8_t buff{};
-    uint16_t message_addr{};
 
     // check if fifo nonfull, return if it is. We will implement real error handling later
     readAddr(fifo_stat_addr, &buff, 1);
@@ -587,12 +595,11 @@ int MCP251863::pushTXFIFO(uint8_t fifoNum, const uint8_t* data, size_t pSize) {
         return 0;
     }
 
-    // get pointer to message object from FIFO, the addresses are only 12-bits wide?
-    message_addr = static_cast<uint16_t>(readReg32(fifo_point_addr));
-    message_addr += 0x400;
-
-    // write message to addr
-    writeAddr(message_addr, data, pSize);
+    const auto message_addr = readMessageAddr(fifo_point_addr, pSize);
+    if (!message_addr) {
+        return 0;
+    }
+    writeAddr(*message_addr, data, pSize);
 
     // UINC queues the frame and TXREQ asks the chip to send it, in one write
     buff = 0b00000011;
@@ -610,7 +617,6 @@ int MCP251863::popRXFIFO(uint8_t fifoNum, uint8_t* dst, size_t pSize) {
         std::to_underlying(RegisterAddress::REG_MCP_C1FIFOUAx) + 12 * (fifoNum - 1);
 
     uint8_t buff{};
-    uint16_t message_addr{};
 
     // check if fifo nonempty, if it is return
     readAddr(fifo_stat_addr, &buff, 1);
@@ -618,11 +624,11 @@ int MCP251863::popRXFIFO(uint8_t fifoNum, uint8_t* dst, size_t pSize) {
         return 0;
     }
 
-    message_addr = static_cast<uint16_t>(readReg32(fifo_point_addr));
-    message_addr += 0x400;
-
-    // read in message
-    readAddr(message_addr, dst, pSize);
+    const auto message_addr = readMessageAddr(fifo_point_addr, pSize);
+    if (!message_addr) {
+        return 0;
+    }
+    readAddr(*message_addr, dst, pSize);
 
     // decrement fifo
     buff = 0b00000001;
@@ -686,7 +692,6 @@ CanFdFrame MCP251863::read_frame(uint8_t fifoNum) {
         std::to_underlying(RegisterAddress::REG_MCP_C1FIFOUAx) + 12 * (fifoNum - 1);
 
     uint8_t buff{};
-    uint16_t message_addr{};
     uint8_t header[12]{};
     const size_t headerSize = rxTimestampsEnabled_ ? 12 : 8;
 
@@ -695,13 +700,16 @@ CanFdFrame MCP251863::read_frame(uint8_t fifoNum) {
         return frame;
     }
 
-    message_addr = static_cast<uint16_t>(readReg32(fifo_point_addr));
-    message_addr += 0x400;
-    readAddr(message_addr, header, headerSize);
+    // checked against the largest object, a header and 64 data bytes
+    const auto message_addr = readMessageAddr(fifo_point_addr, headerSize + 64);
+    if (!message_addr) {
+        return frame;
+    }
+    readAddr(*message_addr, header, headerSize);
     frame = decode_rx_header(header, rxTimestampsEnabled_);
 
     if (frame.len > 0) {
-        readAddr(message_addr + headerSize, frame.data, round_up_to_word(frame.len));
+        readAddr(*message_addr + headerSize, frame.data, round_up_to_word(frame.len));
     }
 
     buff = 0b00000001;
