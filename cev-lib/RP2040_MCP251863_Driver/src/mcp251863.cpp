@@ -131,6 +131,9 @@ void store_word(uint8_t* dst, uint32_t word) {
     dst[3] = static_cast<uint8_t>((word >> 24) & 0xFF);
 }
 
+// the mcp reads and writes its message ram only in whole 32-bit words
+size_t round_up_to_word(size_t len) { return (len + 3) / 4 * 4; }
+
 uint32_t load_word(const uint8_t* src) {
     return (static_cast<uint32_t>(src[0])) | (static_cast<uint32_t>(src[1]) << 8) |
            (static_cast<uint32_t>(src[2]) << 16) | (static_cast<uint32_t>(src[3]) << 24);
@@ -203,12 +206,13 @@ int create_message_obj(uint8_t* dst, const CanFdFrame& frame, size_t* objectSize
     if (!finalize_frame_dlc(&txFrame)) {
         return 0;
     }
-    memset(dst, 0, 8 + txFrame.len);
+    const size_t size = 8 + round_up_to_word(txFrame.len);
+    memset(dst, 0, size);
     store_word(dst, pack_id_word(txFrame));
     store_word(dst + 4, pack_control_word(txFrame));
     std::copy_n(txFrame.data, txFrame.len, dst + 8);
     if (objectSize != nullptr) {
-        *objectSize = 8 + txFrame.len;
+        *objectSize = size;
     }
     return 1;
 }
@@ -735,7 +739,7 @@ CanFdFrame MCP251863::read_frame(uint8_t fifoNum) {
     frame = decode_rx_header(header, rxTimestampsEnabled_);
 
     if (frame.len > 0) {
-        readAddr(message_addr + headerSize, frame.data, frame.len);
+        readAddr(message_addr + headerSize, frame.data, round_up_to_word(frame.len));
     }
 
     buff = 0b00000001;
