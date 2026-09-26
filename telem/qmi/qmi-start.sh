@@ -59,7 +59,7 @@ sudo ip addr add "$IP/$CIDR" dev "$WWAN"
 sudo ip link set "$WWAN" mtu "$MTU"
 
 #add cellular subnet route (but dont make default)
-sudo ip route replace "$IP/$CIDR" dev "$WWAN"
+#sudo ip route replace "$IP/$CIDR" dev "$WWAN"
 
 echo "QMI connection started successfully"
 
