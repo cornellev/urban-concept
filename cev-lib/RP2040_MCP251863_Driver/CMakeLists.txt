@@ -12,6 +12,6 @@ target_link_libraries(rp2040_mcp251863 PUBLIC
     pico_stdlib
 )
 
-target_compile_features(rp2040_mcp251863 PUBLIC cxx_std_17)
+target_compile_features(rp2040_mcp251863 PUBLIC cxx_std_23)
 
 target_compile_options(rp2040_mcp251863 PRIVATE -Wall -Wextra)

@@ -4,8 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <cstdio>
-
 #include "hardware/spi.h"
 #include "pico/stdlib.h"
 
@@ -49,7 +47,7 @@ enum class TxRetransmitMode : uint8_t {
     TXRET_MCP_UNLIM = 0b10
 };
 
-enum FifoInterruptFlag : uint8_t {
+enum class FifoInterruptFlag : uint8_t {
     FIFO_INT_MCP_NFNE  = 0b00000001,  // fifo not full (TX), fifo not empty (RX)
     FIFO_INT_MCP_HFHE_ = 0b00000010,  // fifo half full(TX), fifo half empty (RX)
     FIFO_INT_MCP_FFEE  = 0b00000100,  // fifo full (TX), fifo empty (RX),
@@ -93,7 +91,7 @@ enum class RegisterAddress : uint16_t {
     REG_MCP_C1MASKx    = 0x1F4   // 8 addresses between each
 };
 
-enum FifoMode : uint8_t { FIFO_MODE_MCP_TX = 1, FIFO_MODE_MCP_RX = 0 };
+enum class FifoMode : uint8_t { FIFO_MODE_MCP_TX = 1, FIFO_MODE_MCP_RX = 0 };
 
 enum class PayloadSize : uint8_t {
     PL_SIZE_MCP_0  = 0b0000,
@@ -114,7 +112,7 @@ enum class PayloadSize : uint8_t {
     PL_SIZE_MCP_64 = 0b1111
 };
 
-enum InterruptEnable : uint32_t {
+enum class InterruptEnable : uint32_t {
     INT_EN_MCP_TXIF     = 0b00000000000000000000000000000001,
     INT_EN_MCP_RXIF     = 0b00000000000000000000000000000010,
     INT_EN_MCP_TBCIF    = 0b00000000000000000000000000000100,
@@ -143,11 +141,9 @@ enum InterruptEnable : uint32_t {
     INT_EN_MCP_IVMIE    = 0b10000000000000000000000000000000
 };
 
-enum IoPin { IO_MCP_INT0 = 0, IO_MCP_INT1 = 1 };
+enum class IoPin : uint8_t { IO_MCP_INT0 = 0, IO_MCP_INT1 = 1 };
 
-enum IoMode { IOMODE_MCP_INT = 0, IOMODE_MCP_GPIO_OUT = 1, IOMODE_MCP_GPIO_IN = 2 };
-
-enum MessageType { CAN_BASE_MCP = 0, CAN_FD_BASE_MCP = 1, CAN_EXT = 2, CAN_FD_EXT = 3 };
+enum class IoMode : uint8_t { IOMODE_MCP_INT = 0, IOMODE_MCP_GPIO_OUT = 1, IOMODE_MCP_GPIO_IN = 2 };
 
 // Structs
 
@@ -159,21 +155,21 @@ struct BitTiming {
 };
 
 struct CanFdFrame {
-    uint32_t id;           // CAN ID (11-bit for std, 29-bit for ext)
-    uint8_t dlc;           // Data length code (register value)
-    uint8_t len;           // Actual payload length in bytes
-    bool ide;              // Extended ID flag
-    bool fdf;              // FD frame flag
-    bool brs;              // Bit rate switch flag
-    bool rtr;              // Remote transmission request
-    bool esi;              // Error status indicator
-    bool sid11;            // SID11 field for CAN-FD base frames
-    bool valid;            // Frame contains valid data
-    uint8_t filter_hit;    // Filter index that matched (RX only)
-    uint32_t sequence;     // Sequence number (TX only)
-    bool timestamp_valid;  // Timestamp field is populated
-    uint32_t timestamp;    // Received timestamp (RX only, if enabled)
-    uint8_t data[64];      // Payload bytes
+    uint32_t id{};           // CAN ID (11-bit for std, 29-bit for ext)
+    uint8_t dlc{};           // Data length code (register value)
+    uint8_t len{};           // Actual payload length in bytes
+    bool ide{};              // Extended ID flag
+    bool fdf{};              // FD frame flag
+    bool brs{};              // Bit rate switch flag
+    bool rtr{};              // Remote transmission request
+    bool esi{};              // Error status indicator
+    bool sid11{};            // SID11 field for CAN-FD base frames
+    bool valid{};            // Frame contains valid data
+    uint8_t filter_hit{};    // Filter index that matched (RX only)
+    uint32_t sequence{};     // Sequence number (TX only)
+    bool timestamp_valid{};  // Timestamp field is populated
+    uint32_t timestamp{};    // Received timestamp (RX only, if enabled)
+    uint8_t data[64]{};      // Payload bytes
 };
 
 struct InitConfig {
@@ -242,22 +238,25 @@ class MCP251863 {
     spi_inst_t* spi_;
     uint chipSelectPin_;
     uint standbyPin_;
-    WriteMode writeMode_;
-    ReadMode readMode_;
-    uint8_t txFifoNum_;
-    uint8_t rxFifoNum_;
-    bool rxTimestampsEnabled_;
+    WriteMode writeMode_{WriteMode::WM_MCP_NORM};
+    ReadMode readMode_{ReadMode::RM_MCP_NORM};
+    uint8_t txFifoNum_{1};
+    uint8_t rxFifoNum_{2};
+    bool rxTimestampsEnabled_{};
 
     int readAddr(uint16_t startAddr, uint8_t* dst, size_t len);
     int writeAddr(uint16_t startAddr, const uint8_t* data, size_t len);
+    uint32_t readReg32(uint16_t addr);
+    int writeReg32(uint16_t addr, uint32_t value);
 
     int initGeneralPurposeFifo(uint8_t fifoNum, FifoMode fifoMode, PayloadSize plSize,
                                uint8_t fSize, uint8_t prioNum, TxRetransmitMode retranMode,
-                               FifoInterruptFlag* intFlagArray, size_t intFlagSize);
+                               const FifoInterruptFlag* intFlagArray, size_t intFlagSize);
 
-    int initTransmitEventFifo(uint8_t fSize, FifoInterruptFlag* intFlagArray, size_t intFlagSize);
+    int initTransmitEventFifo(uint8_t fSize, const FifoInterruptFlag* intFlagArray,
+                              size_t intFlagSize);
     int initTransmitQueue(PayloadSize plSize, uint8_t fSize, uint8_t prioNum,
-                          TxRetransmitMode retranMode, FifoInterruptFlag* intFlagArray,
+                          TxRetransmitMode retranMode, const FifoInterruptFlag* intFlagArray,
                           size_t intFlagSize);
 
     int pushTXFIFO(uint8_t fifoNum, const uint8_t* data, size_t pSize);
@@ -266,7 +265,7 @@ class MCP251863 {
 
     int setControllerMode(ControllerMode mode);
     int setTransceiverMode(TransceiverMode mode);
-    int setInterrupts(InterruptEnable* intEnArray, size_t intEnSize);
+    int setInterrupts(const InterruptEnable* intEnArray, size_t intEnSize);
 
    public:
     // make a driver bound to SPI and the pins
@@ -285,7 +284,7 @@ class MCP251863 {
     int setBitTiming(BitTiming nominalTiming, BitTiming dataTiming);
 
     // route one standard-ID filter to a FIFO and enable it
-    int initFilter(uint8_t filNum, uint8_t fifoNum, uint16_t canSID);
+    int initFilter(uint8_t fltNum, uint8_t fifoNum, uint16_t canSID);
 
     // send a CAN FD frame through the default TX FIFO
     int send_canfd(uint32_t id, const uint8_t* data, size_t len, bool brs,
@@ -328,8 +327,8 @@ class MCP251863 {
     int getFLTCode();
     int getICode();
 
-    uint8_t getTxFifoNum() const { return txFifoNum_; }
-    uint8_t getRxFifoNum() const { return rxFifoNum_; }
+    [[nodiscard]] uint8_t getTxFifoNum() const { return txFifoNum_; }
+    [[nodiscard]] uint8_t getRxFifoNum() const { return rxFifoNum_; }
 };
 
 #endif
