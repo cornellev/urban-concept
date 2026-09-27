@@ -5,3 +5,15 @@ Diagnostics:
     IgnoreHeader:
       - pico/.*
       - hardware/.*
+---
+# only the firmware build compiles the driver and the mcp transport, so their compile commands live in elec/build
+If:
+  PathMatch: [cev-lib/RP2040_MCP251863_Driver/.*, cev-lib/chuds/mcp_transport\.hpp]
+CompileFlags:
+  CompilationDatabase: elec/build
+---
+# clangd borrows the driver's flags for this header, which lack chuds, so add it (relative to elec/build)
+If:
+  PathMatch: cev-lib/chuds/mcp_transport\.hpp
+CompileFlags:
+  Add: [-I../../cev-lib]

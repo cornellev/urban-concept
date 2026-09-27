@@ -40,6 +40,9 @@
 
             # pico-sdk is vendored at vendor/pico-sdk
             CMAKE_PREFIX_PATH = "${pkgs.picotool}";
+            # use these tools instead of the build's own download of the pinned arm-gcc and picotool
+            ELEC_SYSTEM_TOOLS = "1";
+            PICO_TOOLCHAIN_PATH = "${pkgs.gcc-arm-embedded}";
             CMAKE_EXPORT_COMPILE_COMMANDS = "1";
             CMAKE_GENERATOR = "Ninja";
           };

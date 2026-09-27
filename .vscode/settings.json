@@ -1,6 +1,6 @@
 {
-  // ensure the arm toolchain is used
-  "clangd.arguments": ["--query-driver=**/arm-none-eabi-*"],
+  // let clangd ask the arm toolchain and host clang++ (chuds tests) for their system headers
+  "clangd.arguments": ["--query-driver=**/arm-none-eabi-*,**/clang++"],
   // disable vscode intellisense because we use the clangd extension
   "C_Cpp.intelliSenseEngine": "disabled"
 }

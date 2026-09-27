@@ -3,8 +3,11 @@ set default-list
 # use powershell on windows
 set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
 
-# picotool: bundled binary on windows, on PATH elsewhere
-picotool := if os() == "windows" { '& "' + replace(module_directory() / ".tools" / "picotool" / "picotool.exe", "\\", "/") + '"' } else { "picotool" }
+# prefer the arm-gcc and picotool the build downloaded into .tools over ones on PATH
+# with ELEC_SYSTEM_TOOLS set (the nix shell), the build uses PATH, so recipes do too
+sep := if os() == "windows" { ";" } else { ":" }
+tools := module_directory() / ".tools" / "picotool" + sep + module_directory() / ".tools" / "arm-gnu-toolchain" / "bin" + sep
+export PATH := if env("ELEC_SYSTEM_TOOLS", "") == "" { tools + env("PATH") } else { env("PATH") }
 
 # configure all targets
 configure:
@@ -24,7 +27,7 @@ clean:
 
 # flash a project onto a pico
 flash target: (build-target target)
-    {{ picotool }} load -x build/src/{{ target }}/{{ target }}.uf2
+    picotool load -x build/src/{{ target }}/{{ target }}.uf2
 
 # ensure installed toolchain versions are as expected
 doctor:

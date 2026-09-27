@@ -79,6 +79,10 @@ and the rules for body structs are in [`docs/serialization.md`](docs/serializati
 
 ## Build
 
+This builds for your computer, not the board, so it needs a C++23 compiler: the Xcode Command Line
+Tools on macOS, or g++ on Linux (`elec/setup/setup-linux.sh` installs it). It isn't set up for
+Windows. Firmware builds on Windows don't need it.
+
 Run these from `cev-lib/chuds/`, or prefix them with `cev-lib chuds` from the repo root
 (`just cev-lib chuds test`):
 

@@ -29,6 +29,43 @@ jobs:
       - name: build firmware
         run: nix develop --command just elec build
 
+  # build the way a student does, with the setup script and no nix
+  setup:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            setup: ./setup/setup-macos.sh
+          - os: ubuntu-latest
+            setup: ./setup/setup-linux.sh
+          - os: ubuntu-24.04-arm
+            setup: ./setup/setup-linux.sh
+          - os: windows-latest
+            setup: powershell -ExecutionPolicy Bypass -File setup/setup-windows.ps1
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: elec
+    steps:
+      # no submodules here, because the setup script fetches them
+      - uses: actions/checkout@v7
+
+      - name: run setup script
+        run: ${{ matrix.setup }}
+
+      # doctor runs after the build because the build downloads the arm compiler and picotool
+      - name: build firmware
+        if: runner.os != 'Windows'
+        run: just build && just doctor
+
+      # winget writes PATH to the registry, which later steps don't reread
+      - name: build firmware (windows)
+        if: runner.os == 'Windows'
+        run: |
+          $env:PATH += ";" + [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+          just build && just doctor
+
   test:
     runs-on: ubuntu-latest
     steps:
