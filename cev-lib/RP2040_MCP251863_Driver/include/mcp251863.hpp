@@ -15,6 +15,10 @@
 const uint MCP251863_BAUD_RATE = 16000000;
 const uint MAX_TRANSFER = 80; // 2 cmd + 8 header + 4 opt. rx timestamp + 64 payload + 2 crc
 const uint MCP251863_MAX_PAYLOAD = 64;
+
+const uint INT_PIN = 25;
+const uint INT0_PIN = 26;
+const uint INT1_PIN = 27;
  
 enum class Error : uint8_t {
     None = 0x00,
@@ -195,7 +199,7 @@ enum FifoInterruptFlag : uint8_t {
     FIFO_INT_MCP_HFHE_ = 0b00000010,  // fifo half full(TX), fifo half empty (RX)
     FIFO_INT_MCP_FFEE  = 0b00000100,  // fifo full (TX), fifo empty (RX),
     FIFO_INT_MCP_OVFL  = 0b00001000,  // fifo overflow (RX),
-    FIFO_INT_MCO_TXAT  = 0b00010000,  // transmits exhausted
+    FIFO_INT_MCP_TXAT  = 0b00010000,  // transmits exhausted
 };
  
 enum class RegisterAddress : uint16_t {
@@ -419,6 +423,9 @@ class MCP251863 {
    private:
     static MCP251863 *instance_;
     static void dmaIrqHandler();
+    static void gpioIrqHandler(uint gpio, uint32_t events); 
+
+    bool dmaInitialized = false;
  
     int dma_tx_chan;
     int dma_rx_chan;
@@ -437,7 +444,10 @@ class MCP251863 {
  
     volatile FifoOperationState fifo_op_state = FifoOperationState::IDLE;
     volatile bool pending_fifo_uinc = false;
- 
+    volatile bool error_flag_pending = false;
+    volatile bool rx_flag_pending = false;
+    volatile bool tx_flag_pending = false;
+
     spi_inst_t* spi_;
     uint chipSelectPin_;
     uint standbyPin_;
@@ -522,31 +532,42 @@ class MCP251863 {
     // make a driver bound to SPI and the pins
     MCP251863(spi_inst_t* ispi, uint iCSPin, uint iSTBYPin);
 
-
     // initialize the controller with defaults
     Error init();
     // initialize controller with a caller-provided timing
     Error init(const InitConfig& config);
 
-
     // optionally set timing of registers
     // (already initialized to default values by init())
     Error setBitTiming(BitTiming nominalTiming, BitTiming dataTiming);
+
+    Error enableErrorInterrupts();
+    Error enableTxInterrupts();
+    Error enableRxInterrupts();
+
+    bool errorInterruptPending() const { return error_flag_pending; }
+    bool rxInterruptPending() const { return rx_flag_pending; }
+    bool txInterruptPending() const { return tx_flag_pending; }
+
+    void clearErrorInterruptPending() { error_flag_pending = false; }
+    void clearRxInterruptPending() { rx_flag_pending = false; }
+    void clearTxInterruptPending() { tx_flag_pending = false; }
  
     // init() does NOT configure any FIFOs. Must call these functions
     // to configure one more general-purpose FIFO after init()
-    // fifoNum & fltNum range: 0 - 31
+    // fifoNum & fltNum range: 0 - 30
     Error configureTxFifo(uint8_t fifoNum);
     Error configureTxFifo(uint8_t fifoNum, uint8_t prioNum);
-        // priority number range: 0 - 31
+        // priority number range: 0 - 30
         // higher number = higher priority to send msgs onto bus
     Error configureRxFifo(uint8_t fifoNum, uint8_t fltNum, uint16_t canSID);
         // suscribes the RX FIFO to an ID
         // if 2 RX FIFOs suscribe to the same ID, the FIFO with
         // the lower fitNum has higher priority (msg would be passed
         // into *that* FIFO)
+    Error configureRxFifo(uint8_t fifoNum, uint16_t canSID);
+        // fltNum = fifoNum
     Error disableFifo(uint8_t fifoNum);
-
 
     // after init() is called, device is still in configuration mode
     // so user can freely configure FIFOs. After configuring FIFOs,
@@ -613,4 +634,3 @@ class MCP251863 {
 };
  
 #endif
-
