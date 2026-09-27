@@ -799,6 +799,8 @@ int MCP251863::setControllerMode(ControllerMode contMode) {
     return 1;
 }
 
+// drives the standby pin, so it changes the device even though no member changes
+// NOLINTNEXTLINE(readability-make-member-function-const)
 int MCP251863::setTransceiverMode(TransceiverMode mode) {
     gpio_put(standbyPin_, std::to_underlying(mode));
     return 1;

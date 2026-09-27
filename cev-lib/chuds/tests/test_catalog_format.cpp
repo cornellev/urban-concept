@@ -1,7 +1,6 @@
 #include <doctest/doctest.h>
 
 #include <array>
-#include <cstdint>
 #include <string_view>
 
 #include "chuds/catalog.hpp"

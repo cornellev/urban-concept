@@ -1,6 +1,5 @@
 #include <doctest/doctest.h>
 
-#include <cstdint>
 #include <expected>
 #include <optional>
 #include <type_traits>
