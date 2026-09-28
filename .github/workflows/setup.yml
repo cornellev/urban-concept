@@ -1,7 +1,7 @@
 name: setup
 
-# runs the setup scripts, then checks firmware builds
-# runs when setup files change, and weekly
+# runs the setup scripts on macos, linux, linux arm, and windows
+# tests chuds on linux arm to verify pi can build with the same install
 on:
   push:
     branches: [main]
@@ -12,6 +12,9 @@ on:
       - elec/CMakeLists.txt
       - elec/justfile
       - vendor/pico-sdk
+      - cev-lib/chuds/**
+      - cev-lib/justfile
+      - justfile
   pull_request:
     paths:
       - .github/workflows/setup.yml
@@ -20,6 +23,9 @@ on:
       - elec/CMakeLists.txt
       - elec/justfile
       - vendor/pico-sdk
+      - cev-lib/chuds/**
+      - cev-lib/justfile
+      - justfile
   schedule:
     - cron: "0 12 * * 1"
   workflow_dispatch:
@@ -29,7 +35,7 @@ permissions:
 
 concurrency:
   group: setup-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   setup:
@@ -57,7 +63,7 @@ jobs:
         run: ${{ matrix.setup }}
 
       # doctor runs after the build because the build downloads the arm compiler and picotool
-      - name: build firmware
+      - name: build firmware (unix)
         if: runner.os != 'Windows'
         run: just build && just doctor
 
@@ -68,3 +74,9 @@ jobs:
         run: |
           $env:PATH += ";" + [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
           just build && just doctor
+
+      # the pi builds chuds with the same apt tools
+      - name: test chuds
+        if: matrix.os == 'ubuntu-24.04-arm'
+        working-directory: .
+        run: just cev-lib chuds test
