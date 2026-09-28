@@ -44,10 +44,8 @@ bool skip_without_can(bool opened) {
     if (std::getenv("CHUDS_REQUIRE_CAN") != nullptr) {
         FAIL("no CAN-FD interface '" << test_if() << "' and CHUDS_REQUIRE_CAN is set");
     }
-    MESSAGE("no CAN-FD interface '"
-            << test_if()
-            << "', skipping. set one up with: "
-               "ip link add vcan0 type vcan && ip link set vcan0 mtu 72 && ip link set up vcan0");
+    MESSAGE("no CAN-FD interface '" << test_if()
+                                    << "', skipping. set one up with: just cev-lib chuds vcan-up");
     return true;
 }
 

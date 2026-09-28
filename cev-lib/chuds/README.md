@@ -24,16 +24,20 @@ Every node must use the same settings, or frames fail with errors. They are defi
   signal has settled from the edge. The remaining 20% is slack that nodes use to stay in step with
   each other.
 
-The RP2040 boards apply these in `Mcp251863Transport`. The VCU sets them when it brings up `can0`:
+The RP2040 boards apply these in `Mcp251863Transport`. On the VCU, run this once from the repo root:
 
 ```sh
-sudo ip link set can0 up type can bitrate 500000 sample-point 0.8 \
-    dbitrate 2000000 dsample-point 0.8 fd on restart-ms 100
+just cev-lib chuds install-can
 ```
 
-`bitrate`/`sample-point` set the nominal phase and `dbitrate`/`dsample-point` the data phase.
-`fd on` enables CAN-FD frames. `restart-ms 100` restarts the controller 100 ms after it goes
-bus-off, instead of leaving it off until someone runs the command again.
+It installs a service that brings `can0` up with these settings whenever it appears, at boot or
+when a USB CAN adapter is plugged in. Rerun it after changing `frame.hpp`. It also applies the new
+settings right away if `can0` is present.
+
+The service reads the settings from `frame.hpp`, so the VCU can't drift from the boards. It runs
+`ip link` with `bitrate`/`sample-point` for the nominal phase and `dbitrate`/`dsample-point` for the
+data phase. `fd on` enables CAN-FD frames. `restart-ms 100` restarts the controller 100 ms after it
+goes bus-off, instead of leaving it off until someone runs the command again.
 
 ## Usage
 
@@ -98,8 +102,7 @@ failure instead, as CI does.
 The demo needs Linux and a virtual CAN interface:
 
 ```sh
-sudo modprobe vcan
-sudo ip link add dev vcan0 type vcan && sudo ip link set vcan0 mtu 72 && sudo ip link set up vcan0
+just vcan-up
 ./build/examples/chuds_demo recv vcan0     # one terminal
 ./build/examples/chuds_demo send vcan0     # another
 ```

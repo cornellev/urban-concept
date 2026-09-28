@@ -1,0 +1,14 @@
+# brings can0 up at the bus settings in frame.hpp whenever the interface appears
+# installed by `just cev-lib chuds install-can`
+[Unit]
+Description=bring can0 up at the chuds bus settings
+BindsTo=sys-subsystem-net-devices-can0.device
+After=sys-subsystem-net-devices-can0.device
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -euc 'args=$(/usr/local/bin/can_link_args); ip link set can0 down; ip link set can0 up type can $$args'
+
+[Install]
+WantedBy=sys-subsystem-net-devices-can0.device
