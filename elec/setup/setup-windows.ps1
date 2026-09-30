@@ -1,36 +1,33 @@
-# set up the windows toolchain for building rp2040 firmware
-# installs any missing tools via winget and downloads a prebuilt picotool
-# after this, build with: just elec build-all   (or: just elec build <project>)
+# set up the windows build tools for rp2040 firmware
+# installs any missing tools via winget
+# the first build downloads the pinned arm compiler and picotool into elec/.tools
+# after this, build from elec/ with: just build
 
 $ErrorActionPreference = "Stop"
-$elec = Split-Path -Parent $PSScriptRoot
-$tools = Join-Path $elec ".tools"
-$picotoolDir = Join-Path $tools "picotool"
-$ptUrl = "https://github.com/raspberrypi/pico-sdk-tools/releases/download/v2.3.0-1/picotool-2.3.0-x64-win.zip"
 
 function Need($cmd, $pkg) {
     if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
         Write-Warning "$cmd not found, installing $pkg..."
         winget install --id $pkg -e --accept-source-agreements --accept-package-agreements
+        if ($LASTEXITCODE -ne 0) { throw "winget failed to install $pkg (exit $LASTEXITCODE)" }
     }
 }
+
+# winget writes PATH to the registry, not open shells, so a rerun would miss tools an earlier run installed
+$env:PATH += ";" + [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+
 Need cmake Kitware.CMake
 Need ninja Ninja-build.Ninja
 Need just Casey.Just
-Need gh GitHub.cli
-Need arm-none-eabi-gcc Arm.GnuArmEmbeddedToolchain
+# pico-sdk's boot_stage2 needs python
+# check for the py launcher because python.exe may be the microsoft store stub
+Need py Python.Python.3.14
 
-# winget writes PATH to the registry, not this session; refresh so fresh installs are usable now
-$env:PATH = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+# fetch the pico-sdk and the one nested submodule the build needs
+$repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+git -C $repo submodule update --init
+if ($LASTEXITCODE -ne 0) { throw "git submodule update failed (exit $LASTEXITCODE)" }
+git -C (Join-Path $repo "vendor/pico-sdk") submodule update --init lib/tinyusb
+if ($LASTEXITCODE -ne 0) { throw "git submodule update failed (exit $LASTEXITCODE)" }
 
-if (-not (Test-Path (Join-Path $picotoolDir "picotoolConfig.cmake"))) {
-    Write-Host "downloading prebuilt picotool..."
-    New-Item -ItemType Directory -Force -Path $tools | Out-Null
-    $zip = Join-Path $tools "picotool.zip"
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Invoke-WebRequest -Uri $ptUrl -OutFile $zip -UseBasicParsing
-    Expand-Archive -Path $zip -DestinationPath $tools -Force
-    Remove-Item $zip
-}
-
-Write-Host "setup complete. build with: just elec build-all"
+Write-Host "setup complete. build from elec/ with: just build"

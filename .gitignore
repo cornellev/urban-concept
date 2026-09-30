@@ -69,5 +69,5 @@ result-*
 .direnv/
 .devenv/
 
-# prebuilt host tools fetched by elec/build.ps1
+# arm-gcc and picotool downloaded by elec/cmake/pinned_tools.cmake
 .tools/
