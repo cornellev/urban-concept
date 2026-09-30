@@ -20,7 +20,8 @@ using namespace chuds::back_aux;
 static_assert(kBrakeAdc >= 26 && kBrakeAdc <= 29);
 constexpr unsigned kBrakeChannel = kBrakeAdc - 26;
 
-constexpr std::uint32_t kPublishPeriodMs = 100;
+constexpr std::uint32_t kPublishPeriodMs   = 100;
+constexpr std::uint32_t kBlinkHalfPeriodMs = 500;
 // the leader must resend body state within this period or outputs fall back to their safe state
 constexpr std::uint32_t kCommandTimeoutMs = 1000;
 // frames handled per loop pass, the mcp rx fifo depth, so a flooded bus cannot starve the timers
@@ -92,7 +93,7 @@ void wiper_tick(Wiper& w) {
 }
 
 void init_outputs() {
-    for (const unsigned pin : {kTurnLeft, kTurnRight}) {
+    for (const unsigned pin : {kStatusLed, kTurnLeft, kTurnRight}) {
         gpio_init(pin);
         gpio_set_dir(pin, GPIO_OUT);
         gpio_put(pin, false);
@@ -152,6 +153,8 @@ int main() {
     bool stopped{};
     cev::Interval pub{kPublishPeriodMs};
     cev::Interval wiper_iv{kWiperTickMs};
+    bool led_on{};
+    cev::Interval blink{kBlinkHalfPeriodMs};
     cev::CanHealth can_health;
     absolute_time_t command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
 
@@ -189,6 +192,11 @@ int main() {
 
         if (wiper_iv.due()) {
             wiper_tick(wiper);
+        }
+
+        if (blink.due()) {
+            led_on = !led_on;
+            gpio_put(kStatusLed, led_on);
         }
 
         if (pub.due()) {

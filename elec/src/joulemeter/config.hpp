@@ -4,7 +4,7 @@
 
 #include "pico/stdlib.h"
 
-// the pico's onboard LED, held on while the firmware runs
+// the pico's onboard LED, blinked while the firmware runs
 constexpr unsigned kStatusLed = PICO_DEFAULT_LED_PIN;
 
 // adc pins, gpio 26-29

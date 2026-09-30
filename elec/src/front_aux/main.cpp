@@ -18,7 +18,8 @@ using namespace chuds::front_aux;
 static_assert(kSteeringAdc >= 26 && kSteeringAdc <= 29);
 constexpr unsigned kSteeringChannel = kSteeringAdc - 26;
 
-constexpr std::uint32_t kPublishPeriodMs = 100;
+constexpr std::uint32_t kPublishPeriodMs   = 100;
+constexpr std::uint32_t kBlinkHalfPeriodMs = 500;
 // the leader must resend body state within this period or outputs fall back to their safe state
 constexpr std::uint32_t kCommandTimeoutMs = 1000;
 // frames handled per loop pass, the mcp rx fifo depth, so a flooded bus cannot starve the timers
@@ -30,7 +31,8 @@ constexpr std::uint32_t kWatchdogMs = 500;
 namespace {
 
 void init_outputs() {
-    for (const unsigned pin : {kTurnLeft, kTurnRight, kHeadlightL, kHeadlightR, kHorn}) {
+    for (const unsigned pin :
+         {kStatusLed, kTurnLeft, kTurnRight, kHeadlightL, kHeadlightR, kHorn}) {
         gpio_init(pin);
         gpio_set_dir(pin, GPIO_OUT);
         gpio_put(pin, false);
@@ -77,6 +79,8 @@ int main() {
     // todo clear on a ratified resume command
     bool stopped{};
     cev::Interval pub{kPublishPeriodMs};
+    bool led_on{};
+    cev::Interval blink{kBlinkHalfPeriodMs};
     cev::CanHealth can_health;
     absolute_time_t command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
 
@@ -111,6 +115,11 @@ int main() {
             body &= chuds::BodyState::kHeadlights;
             apply(body);
             command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
+        }
+
+        if (blink.due()) {
+            led_on = !led_on;
+            gpio_put(kStatusLed, led_on);
         }
 
         if (pub.due()) {

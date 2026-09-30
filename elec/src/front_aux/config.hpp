@@ -1,5 +1,8 @@
 #pragma once
 
+// green status LED, blinked while the firmware runs
+constexpr unsigned kStatusLed = 25;
+
 // turn-signal indicator LEDs, left and right, driven from bus commands
 constexpr unsigned kTurnLeft  = 0;
 constexpr unsigned kTurnRight = 1;

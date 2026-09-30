@@ -11,6 +11,8 @@
 
 using namespace chuds::joulemeter;
 
+constexpr std::uint32_t kBlinkHalfPeriodMs = 500;
+
 namespace {
 
 static_assert(kVoltageAdc >= 26 && kVoltageAdc <= 29);
@@ -41,7 +43,7 @@ int main() {
 
     gpio_init(kStatusLed);
     gpio_set_dir(kStatusLed, GPIO_OUT);
-    gpio_put(kStatusLed, true);
+    gpio_put(kStatusLed, false);
 
     adc_init();
     adc_gpio_init(kVoltageAdc);
@@ -70,6 +72,8 @@ int main() {
     double i_sum{};
     absolute_time_t prev = get_absolute_time();
     cev::Interval report{kReportPeriodMs};
+    bool led_on{};
+    cev::Interval blink{kBlinkHalfPeriodMs};
     cev::CanHealth can_health;
 
     while (true) {
@@ -86,6 +90,11 @@ int main() {
         period_s += dt;
         v_sum += static_cast<double>(v_bus) * dt;
         i_sum += static_cast<double>(amps) * dt;
+
+        if (blink.due()) {
+            led_on = !led_on;
+            gpio_put(kStatusLed, led_on);
+        }
 
         if (report.due()) {
             const Telemetry t{static_cast<float>(v_sum / period_s),
