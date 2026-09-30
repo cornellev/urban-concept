@@ -27,7 +27,7 @@ clean:
 
 # flash a project onto a pico
 flash target: (build-target target)
-    picotool load -x build/src/{{ target }}/{{ target }}.uf2
+    picotool load -f -x build/src/{{ target }}/{{ target }}.uf2
 
 # ensure installed toolchain versions are as expected
 doctor:
