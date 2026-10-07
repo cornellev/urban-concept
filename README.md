@@ -4,13 +4,13 @@ Monorepo for Cornell Electric Vehicles' Urban Concept car
 
 ## Getting started
 
-Clone with submodules:
+Clone, then fetch the pico-sdk submodule and the one nested submodule it needs:
 
 ```sh
-git clone --recurse-submodules https://github.com/cornellev/urban-concept.git
-
-# if already cloned without submodules:
-git submodule update --init --recursive
+git clone https://github.com/cornellev/urban-concept.git
+cd urban-concept
+git submodule update --init
+git -C vendor/pico-sdk submodule update --init lib/tinyusb
 ```
 
 ## Electrical

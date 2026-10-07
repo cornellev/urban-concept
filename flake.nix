@@ -33,11 +33,16 @@
               ninja
               just
               clang-tools
+              # only run-clang-tidy, the rest of the unwrapped clang would shadow the compiler
+              (writeShellScriptBin "run-clang-tidy" ''exec ${llvmPackages.clang-unwrapped}/bin/run-clang-tidy "$@"'')
               gh
             ];
 
-            # pico-sdk is vendored at elec/pico-sdk
+            # pico-sdk is vendored at vendor/pico-sdk
             CMAKE_PREFIX_PATH = "${pkgs.picotool}";
+            # use these tools instead of the build's own download of the pinned arm-gcc and picotool
+            ELEC_SYSTEM_TOOLS = "1";
+            PICO_TOOLCHAIN_PATH = "${pkgs.gcc-arm-embedded}";
             CMAKE_EXPORT_COMPILE_COMMANDS = "1";
             CMAKE_GENERATOR = "Ninja";
           };
@@ -45,7 +50,7 @@
           treefmt = {
             projectRootFile = "flake.nix";
             settings.global.excludes = [
-              "elec/pico-sdk/**"
+              "vendor/pico-sdk/**"
               "**/build/**"
             ];
             programs = {
