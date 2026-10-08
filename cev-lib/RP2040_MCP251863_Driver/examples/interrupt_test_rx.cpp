@@ -9,6 +9,7 @@ static constexpr uint SPI_TX   = 23;
 static constexpr uint SPI_RX   = 20;
 static constexpr uint CS_PIN   = 21;
 static constexpr uint STBY_PIN = 24;
+static constexpr uint INT1_PIN = 27;
 
 static void print_frame(const CanFdFrame& frame) {
     printf("id=0x%03X  len=%d  fdf=%d  brs=%d  ide=%d  esi=%d  filter=%d  data=", frame.id,
@@ -42,7 +43,7 @@ int main() {
         sleep_ms(100);
     }
 
-    mcp.enableRxInterrupts();
+    mcp.enableRxInterrupts(INT1_PIN);
 
     mcp.begin();
 

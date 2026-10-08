@@ -45,11 +45,12 @@ int main() {
         while (mcp.start_push_canfd(0, id, data, sizeof(data), true) != Error::None) {
             tight_loop_contents();
         }
-        while (mcp.poll_push() == Error::Busy) {
+        Error pushed = mcp.poll_push();
+        while (pushed == Error::Busy) {
             tight_loop_contents();
+            pushed = mcp.poll_push();
         }
-        mcp.clear_send();
-        if (mcp.request_send(0) == Error::None) {
+        if (pushed == Error::None) {
             printf("sent FIFO0 frame %d id = 0x%03X data[0]=%02X\n", count, id, data[0]);
         }
 

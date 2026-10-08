@@ -54,11 +54,12 @@ int main() {
         while (mcp.start_push_canfd(0, id0, data0, sizeof(data0), true) != Error::None) {
             sleep_ms(100);
         }
-        while (mcp.poll_push() == Error::Busy) {
+        Error pushed = mcp.poll_push();
+        while (pushed == Error::Busy) {
             sleep_ms(100);
+            pushed = mcp.poll_push();
         }
-        mcp.clear_send();
-        if (mcp.request_send(0) == Error::None) {
+        if (pushed == Error::None) {
             printf("sent FIFO0 frame %d id = 0x%03X data[0]=%02X\n", count, id0, data0[0]);
         }
 
@@ -66,11 +67,12 @@ int main() {
         while (mcp.start_push_canfd(1, id1, data1, sizeof(data1), true) != Error::None) {
             sleep_ms(100);
         }
-        while (mcp.poll_push() == Error::Busy) {
+        pushed = mcp.poll_push();
+        while (pushed == Error::Busy) {
             sleep_ms(100);
+            pushed = mcp.poll_push();
         }
-        mcp.clear_send();
-        if (mcp.request_send(1) == Error::None) {
+        if (pushed == Error::None) {
             printf("sent FIFO1 frame %d id = 0x%03X data[0]=%02X\n", count, id1, data1[0]);
         }
 
@@ -78,11 +80,12 @@ int main() {
         while (mcp.start_push_canfd(2, id2, data2, sizeof(data2), true) != Error::None) {
             sleep_ms(100);
         }
-        while (mcp.poll_push() == Error::Busy) {
+        pushed = mcp.poll_push();
+        while (pushed == Error::Busy) {
             sleep_ms(100);
+            pushed = mcp.poll_push();
         }
-        mcp.clear_send();
-        if (mcp.request_send(2) == Error::None) {
+        if (pushed == Error::None) {
             printf("sent FIFO2 frame %d id = 0x%03X data[0]=%02X\n", count, id2, data2[0]);
         }
 

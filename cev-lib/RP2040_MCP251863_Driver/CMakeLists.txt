@@ -8,6 +8,7 @@ target_include_directories(rp2040_mcp251863 PUBLIC
 )
 
 target_link_libraries(rp2040_mcp251863 PUBLIC
+    hardware_dma
     hardware_spi
     pico_stdlib
 )

@@ -54,8 +54,11 @@ class Mcp251863Transport {
         gpio_pull_up(nint_);
 
         // init needs the spi and pin setup above
+        // filter 0 with an empty mask routes every standard-id frame to the rx fifo
         // NOLINTNEXTLINE(cppcoreguidelines-prefer-member-initializer)
-        init_ok_ = mcp_.init() == 1;
+        init_ok_ = mcp_.init() == Error::None && mcp_.configureTxFifo(kTxFifo) == Error::None &&
+                   mcp_.configureRxFifo(kRxFifo, 0, 0, 0) == Error::None &&
+                   mcp_.begin() == Error::None;
     }
 
     // a move keeps the setup already done, so a Bus can take the transport over
@@ -74,17 +77,18 @@ class Mcp251863Transport {
         }
 
         // chuds frames are CAN-FD with bit-rate switch and a standard id
-        if (mcp_.send_canfd(f.id.raw(), f.data.data(), f.len, true, false) == 1) {
-            return {};
+        const Error err = mcp_.start_push_canfd(kTxFifo, f.id.raw(), f.data.data(), f.len, true);
+        if (err == Error::TxFifoFull) {
+            // a bus-off keeps the tx queue full, so rule it out first
+            if (bus_off()) {
+                return std::unexpected(TxError::BusOff);
+            }
+            return std::unexpected(TxError::QueueFull);
         }
-
-        // a bus-off keeps the tx queue full, so rule it out first
-        if (mcp_.getStatus().bus_off) {
-            return std::unexpected(TxError::BusOff);
+        if (err != Error::None || finish([this] { return mcp_.poll_push(); }) != Error::None) {
+            return std::unexpected(TxError::Error);
         }
-
-        // the frame was prevalidated, so the only failure left is a full tx fifo
-        return std::unexpected(TxError::QueueFull);
+        return {};
     }
 
     // whether the chip initialized
@@ -96,8 +100,12 @@ class Mcp251863Transport {
         if (!init_ok_) {
             return {.state = BusState::Off};
         }
-        const Status s = mcp_.getStatus();
-        BusState state = BusState::Active;
+        const Result<Status> r = mcp_.getStatus();
+        if (!r) {
+            return {.state = BusState::Off};
+        }
+        const Status& s = r.value();
+        BusState state  = BusState::Active;
         if (s.bus_off) {
             state = BusState::Off;
         } else if (s.tx_error_passive || s.rx_error_passive) {
@@ -114,21 +122,30 @@ class Mcp251863Transport {
         if (gpio_get(nint_)) {
             return std::unexpected(RxError::Empty);
         }
-        CanFdFrame cf = mcp_.read_canfd();
-        if (!cf.valid) {
+        const Error err = mcp_.start_pop_canfd(kRxFifo);
+        if (err == Error::RxFifoEmpty) {
             // a dead bus is a fault, not a quiet one
-            if (mcp_.getStatus().bus_off) {
+            if (bus_off()) {
                 return std::unexpected(RxError::BusOff);
             }
 
-            if (mcp_.getFIFOStatus(mcp_.getRxFifoNum()).rx_overflow) {
+            const Result<FifoStatus> fifo = mcp_.getFIFOStatus(kRxFifo);
+            if (fifo && fifo.value().rx_overflow) {
                 // the flag is sticky and holds nINT low, so clear it once reported
-                mcp_.clearRxOverflow();
+                (void)mcp_.clearRxOverflow(kRxFifo);
                 return std::unexpected(RxError::Overflow);
             }
 
             return std::unexpected(RxError::Empty);
         }
+        if (err != Error::None || finish([this] { return mcp_.poll_pop(); }) != Error::None) {
+            return std::unexpected(RxError::Error);
+        }
+        const Result<CanFdFrame> frame = mcp_.get_read_frame();
+        if (!frame) {
+            return std::unexpected(RxError::Error);
+        }
+        const CanFdFrame& cf = frame.value();
 
         // chuds is standard 11-bit CAN-FD only
         // reject classic, remote, extended, out-of-range
@@ -145,6 +162,33 @@ class Mcp251863Transport {
     }
 
    private:
+    // driver fifo numbers, the chip's FIFO1 and FIFO2
+    static constexpr std::uint8_t kTxFifo = 0;
+    static constexpr std::uint8_t kRxFifo = 1;
+
+    // one frame's dma takes under 100 us, so a millisecond means it stalled
+    static constexpr std::uint32_t kDmaTimeoutUs = 1000;
+
+    // waits out the dma transfer that poll reports on
+    // aborts a stalled one so the driver can start the next
+    template <typename Poll>
+    [[nodiscard]] Error finish(Poll poll) {
+        const absolute_time_t deadline = make_timeout_time_us(kDmaTimeoutUs);
+        Error err                      = poll();
+        while (err == Error::Busy && !time_reached(deadline)) {
+            err = poll();
+        }
+        if (err == Error::Busy) {
+            mcp_.abort();
+        }
+        return err;
+    }
+
+    [[nodiscard]] bool bus_off() {
+        const Result<Status> s = mcp_.getStatus();
+        return s && s.value().bus_off;
+    }
+
     spi_inst_t* spi_;
     MCP251863 mcp_;
     unsigned nint_;
