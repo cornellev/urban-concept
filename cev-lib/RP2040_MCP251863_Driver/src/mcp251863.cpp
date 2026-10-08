@@ -9,13 +9,13 @@ constexpr auto to_underlying(T value) -> std::underlying_type_t<T> {
     return static_cast<typename std::underlying_type<T>::type>(value);
 }
 
-#define MCP_TRY(expr)                  \
-    do {                               \
-        const Error e = (expr);        \
-        if (e != Error::None) {        \
-            return e;                  \
-        }                              \
-    } while (0)                        \
+#define MCP_TRY(expr)           \
+    do {                        \
+        const Error e = (expr); \
+        if (e != Error::None) { \
+            return e;           \
+        }                       \
+    } while (0)
 
 MCP251863* MCP251863::instance_ = nullptr;
 
@@ -43,7 +43,6 @@ std::optional<PayloadSize> canfd_len_to_dlc(size_t len) {
     }
 }
 
-
 static uint8_t canfd_dlc_to_len(uint8_t dlc) {
     switch (static_cast<PayloadSize>(dlc & 0x0F)) {
         case PayloadSize::PL_SIZE_MCP_0: return 0;
@@ -66,7 +65,6 @@ static uint8_t canfd_dlc_to_len(uint8_t dlc) {
     }
 }
 
-
 uint8_t fifo_plsize_to_len(FifoPayloadSize size) {
     switch (size) {
         case FifoPayloadSize::FIFO_PLSIZE_8: return 8;
@@ -81,7 +79,6 @@ uint8_t fifo_plsize_to_len(FifoPayloadSize size) {
     }
 }
 
-
 uint8_t can_dlc_to_len(uint8_t dlc, bool fdf) {
     if (!fdf && ((dlc & 0x0F) > 8)) {
         return 8;
@@ -89,25 +86,17 @@ uint8_t can_dlc_to_len(uint8_t dlc, bool fdf) {
     return canfd_dlc_to_len(dlc);
 }
 
-
 Error create_message_obj(uint8_t* dst, const CanFdFrame& frame, size_t* objectSize);
 
-
 uint32_t pack_nominal_bit_timing(BitTiming timing) {
-    return (((uint32_t)timing.brp & 0xFF) << 24) |
-           (((uint32_t)timing.tseg1 & 0xFF) << 16) |
-           (((uint32_t)timing.tseg2 & 0x7F) << 8) |
-           ((uint32_t)timing.sjw & 0x7F);
+    return (((uint32_t)timing.brp & 0xFF) << 24) | (((uint32_t)timing.tseg1 & 0xFF) << 16) |
+           (((uint32_t)timing.tseg2 & 0x7F) << 8) | ((uint32_t)timing.sjw & 0x7F);
 }
-
 
 uint32_t pack_data_bit_timing(BitTiming timing) {
-    return (((uint32_t)timing.brp & 0xFF) << 24) |
-           (((uint32_t)timing.tseg1 & 0xFF) << 16) |
-           (((uint32_t)timing.tseg2 & 0x0F) << 8) |
-           ((uint32_t)timing.sjw & 0x0F);
+    return (((uint32_t)timing.brp & 0xFF) << 24) | (((uint32_t)timing.tseg1 & 0xFF) << 16) |
+           (((uint32_t)timing.tseg2 & 0x0F) << 8) | ((uint32_t)timing.sjw & 0x0F);
 }
-
 
 Error validate_bit_timing(const BitTiming& nominal, const BitTiming& data) {
     if (nominal.tseg2 > 0x7F || nominal.sjw > 0x7F) {
@@ -119,29 +108,24 @@ Error validate_bit_timing(const BitTiming& nominal, const BitTiming& data) {
     return Error::None;
 }
 
-
 uint32_t encode_tdc(bool enable, uint8_t offset) {
     if (!enable) {
         return 0;
     }
-
 
     // 10 at bits 17:16 for TDCMOD auto
     // TDCO at bits 14:6
     return (2UL << 16) | ((offset & 0x3F) << 8);
 }
 
-
 InitConfig default_init_config() {
     InitConfig config{};
 
-
-    config.enablePll = 0;
-    config.sclkDiv2 = 0;
-    config.enableTdc = 1;
+    config.enablePll         = 0;
+    config.sclkDiv2          = 0;
+    config.enableTdc         = 1;
     config.rxTimestampEnable = 0;
-    config.tdcOffset = 6;
-
+    config.tdcOffset         = 6;
 
     // FIFO depth is the number of message slots, 1..32
     // FSIZE register field stores it as 0..31
@@ -149,41 +133,31 @@ InitConfig default_init_config() {
     config.txFifoDepth = 8;
     config.rxFifoDepth = 8;
 
-
     config.txPayloadSize = FifoPayloadSize::FIFO_PLSIZE_64;
     config.rxPayloadSize = FifoPayloadSize::FIFO_PLSIZE_64;
-
 
     // Defaults assume a 40 MHz CAN clock: nominal 500 kbit/s, data 2 Mbit/s.
     config.nominalBitTiming = kBitTiming500K40MHz;
     config.dataBitTiming    = kBitTiming2M40MHz;
 
-
     return config;
 }
-
 
 uint32_t pack_id_word(const CanFdFrame& frame) {
     if (frame.ide) {
         return ((frame.id >> 18) & 0x7FF) | ((frame.id & 0x3FFFF) << 11);
     }
 
-
-    uint32_t sid = frame.id & 0x7FF;
+    uint32_t sid   = frame.id & 0x7FF;
     uint32_t sid11 = (frame.sid11 || (frame.id > 0x7FF)) ? ((frame.id >> 11) & 0x01) : 0;
     return sid | (sid11 << 29);
 }
 
-
 uint32_t pack_control_word(const CanFdFrame& frame) {
-    return ((uint32_t)frame.dlc & 0x0F) |
-           (frame.ide ? (1UL << 4) : 0) |
-           (frame.rtr ? (1UL << 5) : 0) |
-           (frame.brs ? (1UL << 6) : 0) |
-           (frame.fdf ? (1UL << 7) : 0) |
-           (frame.esi ? (1UL << 8) : 0);
+    return ((uint32_t)frame.dlc & 0x0F) | (frame.ide ? (1UL << 4) : 0) |
+           (frame.rtr ? (1UL << 5) : 0) | (frame.brs ? (1UL << 6) : 0) |
+           (frame.fdf ? (1UL << 7) : 0) | (frame.esi ? (1UL << 8) : 0);
 }
-
 
 void store_word(uint8_t* dst, uint32_t word) {
     dst[0] = (uint8_t)(word & 0xFF);
@@ -192,14 +166,10 @@ void store_word(uint8_t* dst, uint32_t word) {
     dst[3] = (uint8_t)((word >> 24) & 0xFF);
 }
 
-
 uint32_t load_word(const uint8_t* src) {
-    return ((uint32_t)src[0]) |
-        ((uint32_t)src[1] << 8) |
-        ((uint32_t)src[2] << 16) |
-        ((uint32_t)src[3] << 24);
+    return ((uint32_t)src[0]) | ((uint32_t)src[1] << 8) | ((uint32_t)src[2] << 16) |
+           ((uint32_t)src[3] << 24);
 }
-
 
 Error finalize_frame_dlc(CanFdFrame* frame) {
     if (frame->fdf) {
@@ -211,7 +181,6 @@ Error finalize_frame_dlc(CanFdFrame* frame) {
         return Error::None;
     }
 
-
     if (frame->len > 8) {
         return Error::InvalidPayloadSize;
     }
@@ -219,7 +188,6 @@ Error finalize_frame_dlc(CanFdFrame* frame) {
     frame->brs = 0;
     return Error::None;
 }
-
 
 Error validate_tx_frame(const CanFdFrame& frame) {
     if (frame.ide && (frame.id > 0x1FFFFFFF)) {
@@ -237,22 +205,20 @@ Error validate_tx_frame(const CanFdFrame& frame) {
     return Error::None;
 }
 
-
 CanFdFrame decode_rx_header(const uint8_t* header, bool timestampEnabled) {
     CanFdFrame frame{};
 
-
-    uint32_t word0 = load_word(header);
-    uint32_t word1 = load_word(header + 4);
-    frame.dlc = word1 & 0x0F;
-    frame.ide = (word1 & (1UL << 4)) != 0;
-    frame.rtr = (word1 & (1UL << 5)) != 0;
-    frame.brs = (word1 & (1UL << 6)) != 0;
-    frame.fdf = (word1 & (1UL << 7)) != 0;
-    frame.esi = (word1 & (1UL << 8)) != 0;
-    frame.filter_hit = (word1 >> 11) & 0x1F;
-    frame.sid11 = (word0 & (1UL << 29)) != 0;
-    frame.len = can_dlc_to_len(frame.dlc, frame.fdf);
+    uint32_t word0        = load_word(header);
+    uint32_t word1        = load_word(header + 4);
+    frame.dlc             = word1 & 0x0F;
+    frame.ide             = (word1 & (1UL << 4)) != 0;
+    frame.rtr             = (word1 & (1UL << 5)) != 0;
+    frame.brs             = (word1 & (1UL << 6)) != 0;
+    frame.fdf             = (word1 & (1UL << 7)) != 0;
+    frame.esi             = (word1 & (1UL << 8)) != 0;
+    frame.filter_hit      = (word1 >> 11) & 0x1F;
+    frame.sid11           = (word0 & (1UL << 29)) != 0;
+    frame.len             = can_dlc_to_len(frame.dlc, frame.fdf);
     frame.timestamp_valid = timestampEnabled;
     if (timestampEnabled) {
         frame.timestamp = load_word(header + 8);
@@ -260,33 +226,27 @@ CanFdFrame decode_rx_header(const uint8_t* header, bool timestampEnabled) {
     // suspicious
     if (frame.ide) {
         frame.id = ((word0 & 0x7FF) << 18) | ((word0 >> 11) & 0x3FFFF);
-    }
-    else {
+    } else {
         frame.id = (word0 & 0x7FF) | ((uint32_t)(frame.sid11 ? 1 : 0) << 11);
     }
 
-
     return frame;
 }
-
 
 Error create_message_obj(uint8_t* dst, const CanFdFrame& frame, size_t* objectSize) {
     CanFdFrame txFrame = frame;
     MCP_TRY(validate_tx_frame(txFrame));
     MCP_TRY(finalize_frame_dlc(&txFrame));
 
-
     size_t rawSize = 8 + (size_t)txFrame.len;
-    size_t objSize = (rawSize + 3) & ~static_cast<size_t>(3); // round up to multiple of 4
-
+    size_t objSize = (rawSize + 3) & ~static_cast<size_t>(3);  // round up to multiple of 4
 
     memset(dst, 0, objSize);
     store_word(dst, pack_id_word(txFrame));
     store_word(dst + 4, pack_control_word(txFrame));
-    for (uint8_t i=0; i<txFrame.len; i++) {
-        dst[8+i] = txFrame.data[i];
+    for (uint8_t i = 0; i < txFrame.len; i++) {
+        dst[8 + i] = txFrame.data[i];
     }
-
 
     if (objectSize != NULL) {
         *objectSize = objSize;
@@ -294,20 +254,17 @@ Error create_message_obj(uint8_t* dst, const CanFdFrame& frame, size_t* objectSi
     return Error::None;
 }
 
-
 }  // namespace
 
-
-MCP251863::MCP251863(spi_inst_t *ispi, uint iCSPin, uint iSTBYPin) {
+MCP251863::MCP251863(spi_inst_t* ispi, uint iCSPin, uint iSTBYPin) {
     spi_                 = ispi;
     chipSelectPin_       = iCSPin;
     standbyPin_          = iSTBYPin;
     writeMode_           = WriteMode::WM_MCP_NORM;
     readMode_            = ReadMode::RM_MCP_NORM;
     rxTimestampsEnabled_ = false;
-    instance_             = this;
+    instance_            = this;
 }
-
 
 // Checks if a FIFO was actually configured and in the direction expected
 Error MCP251863::checkFifo(uint8_t fifoNum, bool wantTx) const {
@@ -321,20 +278,17 @@ Error MCP251863::checkFifo(uint8_t fifoNum, bool wantTx) const {
     return Error::None;
 }
 
-
 void MCP251863::csSelect() {
     asm volatile("nop \n nop \n nop");
     gpio_put(chipSelectPin_, 0);
     asm volatile("nop \n nop \n nop");
 }
 
-
 void MCP251863::csDeselect() {
     asm volatile("nop \n nop \n nop");
     gpio_put(chipSelectPin_, 1);
     asm volatile("nop \n nop \n nop");
 }
-
 
 Error MCP251863::dmaWriteAddr(uint16_t startAddr, const uint8_t* data, size_t len) {
     if (data == nullptr && len > 0) {
@@ -344,24 +298,18 @@ Error MCP251863::dmaWriteAddr(uint16_t startAddr, const uint8_t* data, size_t le
         return Error::InvalidPayloadSize;
     }
 
-
     // form message CCCC-AAAAAAAAAAAA
     tx_buff[0] = (to_underlying(Command::CMD_MCP_WRITA) << 4) | (startAddr >> 8);
     tx_buff[1] = (startAddr << 4) >> 4;
 
-
     memcpy(&tx_buff[2], data, len);
-
 
     transfer_len = len;
 
-
     spiTransferDMA(len + 2);
-
 
     return Error::None;
 }
-
 
 // blocking SPI
 // CRC mode and Safe mode unimplemented
@@ -372,20 +320,16 @@ Error MCP251863::writeAddr(uint16_t startAddr, const uint8_t* data, size_t len) 
     // form message CCCC-AAAAAAAAAAAA
     uint8_t message[2];
 
-
     message[0] = (to_underlying(Command::CMD_MCP_WRITA) << 4) | (startAddr >> 8);
     message[1] = (startAddr << 4) >> 4;
-
 
     csSelect();
     spi_write_blocking(spi_, message, 2);
     spi_write_blocking(spi_, data, len);
     csDeselect();
 
-
     return Error::None;
 }
-
 
 Error MCP251863::dmaReadAddr(uint16_t startAddr, uint8_t* dst, size_t len) {
     if (dst == nullptr) {
@@ -395,24 +339,18 @@ Error MCP251863::dmaReadAddr(uint16_t startAddr, uint8_t* dst, size_t len) {
         return Error::InvalidPayloadSize;
     }
 
-
     // form message CCCC-AAAAAAAAAAAA
     tx_buff[0] = (to_underlying(Command::CMD_MCP_READA) << 4) | (startAddr >> 8);
     tx_buff[1] = (startAddr << 4) >> 4;
 
-
     user_rx_buff = dst;
-
 
     transfer_len = len;
 
-
     spiTransferDMA(len + 2);
-
 
     return Error::None;
 }
-
 
 Error MCP251863::readAddr(uint16_t startAddr, uint8_t* dst, size_t len) {
     if (dst == nullptr) {
@@ -420,21 +358,17 @@ Error MCP251863::readAddr(uint16_t startAddr, uint8_t* dst, size_t len) {
     }
     uint8_t message[2] = {0};
 
-
     // form message CCCC-AAAAAAAAAAAA
     message[0] = (to_underlying(Command::CMD_MCP_READA) << 4) | (startAddr >> 8);
     message[1] = (startAddr << 4) >> 4;
-
 
     csSelect();
     spi_write_blocking(spi_, message, 2);
     spi_read_blocking(spi_, 0, dst, len);
     csDeselect();
 
-
     return Error::None;
 }
-
 
 // helper functions for reading/writing to 4 byte registers
 Error MCP251863::readReg(uint16_t addr, uint32_t* dst) {
@@ -443,13 +377,10 @@ Error MCP251863::readReg(uint16_t addr, uint32_t* dst) {
     }
     uint8_t buf[4] = {0};
     MCP_TRY(readAddr(addr, buf, 4));
-    *dst = ((uint32_t)buf[0])       |
-           ((uint32_t)buf[1] << 8)  |
-           ((uint32_t)buf[2] << 16) |
+    *dst = ((uint32_t)buf[0]) | ((uint32_t)buf[1] << 8) | ((uint32_t)buf[2] << 16) |
            ((uint32_t)buf[3] << 24);
     return Error::None;
 }
-
 
 Error MCP251863::writeReg(uint16_t addr, uint32_t value) {
     uint8_t buff[4] = {
@@ -461,7 +392,6 @@ Error MCP251863::writeReg(uint16_t addr, uint32_t value) {
     return writeAddr(addr, buff, 4);
 }
 
-
 // R-M-W
 Error MCP251863::updateByte(uint16_t addr, uint8_t field, uint8_t value) {
     uint8_t buff = 0;
@@ -470,9 +400,8 @@ Error MCP251863::updateByte(uint16_t addr, uint8_t field, uint8_t value) {
     return writeAddr(addr, &buff, 1);
 }
 
-
-Error MCP251863::pollRegisterBit(
-    uint16_t addr, uint8_t mask, bool wantSet, int maxIters, uint32_t delayUs, Error timeoutType) {
+Error MCP251863::pollRegisterBit(uint16_t addr, uint8_t mask, bool wantSet, int maxIters,
+                                 uint32_t delayUs, Error timeoutType) {
     for (int i = 0; i < maxIters; i++) {
         uint8_t buff = 0;
         MCP_TRY(readAddr(addr, &buff, 1));
@@ -487,15 +416,10 @@ Error MCP251863::pollRegisterBit(
     return timeoutType;
 }
 
-
-Error MCP251863::pollRegisterBit(
-    uint16_t addr, uint8_t mask, bool wantSet, Error timeoutType) {
-        // default 100 iterations, 1 ms delay
-        return pollRegisterBit(addr, mask, wantSet, 100, 1000, timeoutType);
-    }
-
-
-
+Error MCP251863::pollRegisterBit(uint16_t addr, uint8_t mask, bool wantSet, Error timeoutType) {
+    // default 100 iterations, 1 ms delay
+    return pollRegisterBit(addr, mask, wantSet, 100, 1000, timeoutType);
+}
 
 Error MCP251863::readOpMode(uint8_t* opmod) {
     uint8_t buff = 0;
@@ -503,7 +427,6 @@ Error MCP251863::readOpMode(uint8_t* opmod) {
     *opmod = buff >> 5;
     return Error::None;
 }
-
 
 Error MCP251863::waitForOpMode(ControllerMode target, int maxIters, uint32_t delayUs) {
     for (int i = 0; i < maxIters; i++) {
@@ -518,13 +441,10 @@ Error MCP251863::waitForOpMode(ControllerMode target, int maxIters, uint32_t del
     return Error::ModeChangeTimeout;
 }
 
+Error MCP251863::waitForOpMode(ControllerMode target) { return waitForOpMode(target, 100, 1000); }
 
-Error MCP251863::waitForOpMode(ControllerMode target) {
-    return waitForOpMode(target, 100, 1000);
-}
-
-
-Error MCP251863::readFifoUserAddress(uint16_t fifoPointAddr, size_t objectSize, uint16_t* messageAddr) {
+Error MCP251863::readFifoUserAddress(uint16_t fifoPointAddr, size_t objectSize,
+                                     uint16_t* messageAddr) {
     uint16_t ua = 0;
     MCP_TRY(readAddr(fifoPointAddr, (uint8_t*)&ua, 2));
     // RAM is 2 KB (0x400 - 0xBFF)
@@ -537,91 +457,40 @@ Error MCP251863::readFifoUserAddress(uint16_t fifoPointAddr, size_t objectSize, 
     return Error::None;
 }
 
-
 Error MCP251863::initDMA() {
-    int tx = dma_claim_unused_channel(false);
+    int tx      = dma_claim_unused_channel(false);
     dma_tx_chan = tx;
-    dma_tx_cfg = dma_channel_get_default_config(dma_tx_chan);
-    channel_config_set_transfer_data_size(
-        &dma_tx_cfg,
-        DMA_SIZE_8
-    );
-    channel_config_set_read_increment(
-        &dma_tx_cfg,
-        true
-    );
-    channel_config_set_write_increment(
-        &dma_tx_cfg,
-        false
-    );
-    channel_config_set_dreq(
-        &dma_tx_cfg,
-        spi_get_dreq(spi_, true)
-    );
-    dma_channel_configure(
-        dma_tx_chan,
-        &dma_tx_cfg,
-        &spi_get_hw(spi_)->dr,
-        tx_buff,
-        0,
-        false
-    );
+    dma_tx_cfg  = dma_channel_get_default_config(dma_tx_chan);
+    channel_config_set_transfer_data_size(&dma_tx_cfg, DMA_SIZE_8);
+    channel_config_set_read_increment(&dma_tx_cfg, true);
+    channel_config_set_write_increment(&dma_tx_cfg, false);
+    channel_config_set_dreq(&dma_tx_cfg, spi_get_dreq(spi_, true));
+    dma_channel_configure(dma_tx_chan, &dma_tx_cfg, &spi_get_hw(spi_)->dr, tx_buff, 0, false);
 
-
-    int rx = dma_claim_unused_channel(false);
+    int rx      = dma_claim_unused_channel(false);
     dma_rx_chan = rx;
-    dma_rx_cfg = dma_channel_get_default_config(dma_rx_chan);
-    channel_config_set_transfer_data_size(
-        &dma_rx_cfg,
-        DMA_SIZE_8
-    );
-    channel_config_set_read_increment(
-        &dma_rx_cfg,
-        false
-    );
-    channel_config_set_write_increment(
-        &dma_rx_cfg,
-        true
-    );
-    channel_config_set_dreq(
-        &dma_rx_cfg,
-        spi_get_dreq(spi_, false)
-    );
-    dma_channel_configure(
-        dma_rx_chan,
-        &dma_rx_cfg,
-        rx_buff,
-        &spi_get_hw(spi_)->dr,
-        0,
-        false
-    );
-
+    dma_rx_cfg  = dma_channel_get_default_config(dma_rx_chan);
+    channel_config_set_transfer_data_size(&dma_rx_cfg, DMA_SIZE_8);
+    channel_config_set_read_increment(&dma_rx_cfg, false);
+    channel_config_set_write_increment(&dma_rx_cfg, true);
+    channel_config_set_dreq(&dma_rx_cfg, spi_get_dreq(spi_, false));
+    dma_channel_configure(dma_rx_chan, &dma_rx_cfg, rx_buff, &spi_get_hw(spi_)->dr, 0, false);
 
     // DMA raises IRQ line 0 when it finishes
     // call dmaIrqHandler whenever DMA int 0 fires
-    dma_channel_set_irq0_enabled(
-        dma_rx_chan, // RX finishes after TX
-        true
-    );
+    dma_channel_set_irq0_enabled(dma_rx_chan,  // RX finishes after TX
+                                 true);
     // no one else should use the DMA_IRQ_0 line
-    irq_set_exclusive_handler(
-        DMA_IRQ_0,
-        MCP251863::dmaIrqHandler
-    );
-    irq_set_enabled(
-        DMA_IRQ_0,
-        true
-    );
+    irq_set_exclusive_handler(DMA_IRQ_0, MCP251863::dmaIrqHandler);
+    irq_set_enabled(DMA_IRQ_0, true);
     dmaInitialized = true;
     return Error::None;
 }
-
 
 void MCP251863::spiTransferDMA(size_t len) {
     // abort possible unfinished transactions
     dma_channel_abort(dma_tx_chan);
     dma_channel_abort(dma_rx_chan);
-
 
     // clear overrun and drain RX FIFO
     spi_get_hw(spi_)->icr = SPI_SSPICR_RORIC_BITS;
@@ -629,33 +498,24 @@ void MCP251863::spiTransferDMA(size_t len) {
         (void)spi_get_hw(spi_)->dr;
     }
 
-
     dma_channel_set_read_addr(dma_tx_chan, tx_buff, false);
     dma_channel_set_write_addr(dma_rx_chan, rx_buff, false);
-
 
     dma_channel_set_trans_count(dma_tx_chan, len, false);
     dma_channel_set_trans_count(dma_rx_chan, len, false);
 
-
     gpio_put(chipSelectPin_, 0);
 
-
     // start both DMA channels
-    dma_start_channel_mask(
-        (1u << dma_tx_chan) |
-        (1u << dma_rx_chan)
-    );
+    dma_start_channel_mask((1u << dma_tx_chan) | (1u << dma_rx_chan));
 }
-
 
 void MCP251863::dmaIrqHandler() {
     if (instance_ != nullptr) {
-        dma_channel_acknowledge_irq0(instance_->dma_rx_chan); // clear int flag
+        dma_channel_acknowledge_irq0(instance_->dma_rx_chan);  // clear int flag
         instance_->finishTransfer();
     }
 }
-
 
 void MCP251863::finishTransfer() {
     while (spi_is_busy(spi_)) {
@@ -663,19 +523,17 @@ void MCP251863::finishTransfer() {
     }
     gpio_put(chipSelectPin_, 1);
 
-
     if (fifo_op_state == FifoOperationState::POPPING) {
         pending_fifo_uinc = true;
         memcpy(user_rx_buff, &rx_buff[2], transfer_len);
         user_frame.valid = 1;
-        fifo_op_state = FifoOperationState::POP_DONE;
+        fifo_op_state    = FifoOperationState::POP_DONE;
     }
     if (fifo_op_state == FifoOperationState::PUSHING) {
         pending_fifo_uinc = true;
-        fifo_op_state = FifoOperationState::PUSH_DONE;
+        fifo_op_state     = FifoOperationState::PUSH_DONE;
     }
 }
-
 
 Error MCP251863::serviceFifoUinc() {
     MCP_TRY(updateByte(user_fifo_addr + 1, 0x00, 0b00000001));  // UINC
@@ -686,26 +544,21 @@ Error MCP251863::serviceFifoUinc() {
     return Error::None;
 }
 
-
 void MCP251863::abort() {
     if (dmaInitialized) {
         dma_channel_abort(dma_tx_chan);
         dma_channel_abort(dma_rx_chan);
     }
     gpio_put(chipSelectPin_, 1);
-    fifo_op_state = FifoOperationState::IDLE;
+    fifo_op_state     = FifoOperationState::IDLE;
     pending_fifo_uinc = false;
 }
 
-
-Error MCP251863::init() {
-    return init(default_init_config());
-}
-
+Error MCP251863::init() { return init(default_init_config()); }
 
 Error MCP251863::init(const InitConfig& config) {
-    if ((config.txFifoDepth < 1) || (config.txFifoDepth > 32) ||
-        (config.rxFifoDepth < 1) || (config.rxFifoDepth > 32)) {
+    if ((config.txFifoDepth < 1) || (config.txFifoDepth > 32) || (config.rxFifoDepth < 1) ||
+        (config.rxFifoDepth > 32)) {
         return Error::InvalidFifoDepth;
     }
     if (fifo_plsize_to_len(config.txPayloadSize) == 0 ||
@@ -713,7 +566,6 @@ Error MCP251863::init(const InitConfig& config) {
         return Error::InvalidPayloadSize;
     }
     MCP_TRY(validate_bit_timing(config.nominalBitTiming, config.dataBitTiming));
-
 
     // Remember the config so recover() can repeat this exact bring-up
     lastConfig = config;
@@ -724,13 +576,11 @@ Error MCP251863::init(const InitConfig& config) {
     gpio_init(standbyPin_);
     gpio_put(standbyPin_, to_underlying(TransceiverMode::TMODE_MCP_STBY));
     gpio_set_dir(standbyPin_, GPIO_OUT);
-    
-    (void)setTransceiverMode(TransceiverMode::TMODE_MCP_STBY);
 
+    (void)setTransceiverMode(TransceiverMode::TMODE_MCP_STBY);
 
     writeMode_ = WriteMode::WM_MCP_NORM;
     readMode_  = ReadMode::RM_MCP_NORM;
-
 
     abort();
     for (FifoInfo& f : fifoInfo) {
@@ -738,10 +588,9 @@ Error MCP251863::init(const InitConfig& config) {
     }
     bus_off_latched = false;
     // bits are cleared manually or when TXREQ is set
-    txlarb_latched  = false;
-    txerr_latched   = false;
+    txlarb_latched = false;
+    txerr_latched  = false;
     // could also expose: txbp, rxbp, txwarn, rxwarn, ewarn
-
 
     const Error err = configureDevice(config);
     if (err != Error::None) {
@@ -750,57 +599,42 @@ Error MCP251863::init(const InitConfig& config) {
         return err;
     }
 
-
     return Error::None;
 }
 
-
 Error MCP251863::configureDevice(const InitConfig& config) {
     uint8_t zero = 0;
-    uint8_t one = 0;
+    uint8_t one  = 0;
     uint32_t reg = 0;
-
 
     MCP_TRY(reset());
     sleep_ms(10);
 
-
-    MCP_TRY(pollRegisterBit(
-        to_underlying(RegisterAddress::REG_MCP_OSC) + 1, 1 << 2, true,
-        Error::OscillatorTimeout));
-
+    MCP_TRY(pollRegisterBit(to_underlying(RegisterAddress::REG_MCP_OSC) + 1, 1 << 2, true,
+                            Error::OscillatorTimeout));
 
     MCP_TRY(setControllerMode(ControllerMode::CMODE_MCP_CONF));
-
 
     uint8_t osc = (config.enablePll ? 0x01 : 0x00) | (config.sclkDiv2 ? 0x10 : 0x00);
     MCP_TRY(writeAddr(to_underlying(RegisterAddress::REG_MCP_OSC), &osc, 1));
     if (config.enablePll) {
         // PLLRDY
-        MCP_TRY(pollRegisterBit(
-            to_underlying(RegisterAddress::REG_MCP_OSC) + 1, 0x01, true,
-            Error::PllTimeout));
+        MCP_TRY(pollRegisterBit(to_underlying(RegisterAddress::REG_MCP_OSC) + 1, 0x01, true,
+                                Error::PllTimeout));
     }
-
 
     if (config.sclkDiv2) {
         // SCLKRDY
-        MCP_TRY(pollRegisterBit(
-            to_underlying(RegisterAddress::REG_MCP_OSC) + 1, 1 << 4, true,
-            Error::SclkdivTimeout));
+        MCP_TRY(pollRegisterBit(to_underlying(RegisterAddress::REG_MCP_OSC) + 1, 1 << 4, true,
+                                Error::SclkdivTimeout));
     }
-
 
     MCP_TRY(setBitTiming(config.nominalBitTiming, config.dataBitTiming));
 
-
-    MCP_TRY(writeReg(
-        to_underlying(RegisterAddress::REG_MCP_C1TDC),
-        encode_tdc(config.enableTdc, config.tdcOffset)));
-
+    MCP_TRY(writeReg(to_underlying(RegisterAddress::REG_MCP_C1TDC),
+                     encode_tdc(config.enableTdc, config.tdcOffset)));
 
     rxTimestampsEnabled_ = config.rxTimestampEnable != 0;
-
 
     // FifoInterruptFlag txFlags[] = {FIFO_INT_MCP_NFNE, FIFO_INT_MCO_TXAT};
     // FifoInterruptFlag rxFlags[] = {FIFO_INT_MCP_NFNE, FIFO_INT_MCP_OVFL};
@@ -809,7 +643,7 @@ Error MCP251863::configureDevice(const InitConfig& config) {
     //         to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * (rxFifoNum_ - 1);
     //     MCP_TRY(updateByte(rx_fifo_addr, 0x00, 1 << 5));  // RXTSEN
     // }
-   
+
     // clear interrupt flag registers
     reg = 0xFFFFFFFF;
     MCP_TRY(writeReg(to_underlying(RegisterAddress::REG_MCP_C1RXIF), reg));
@@ -817,107 +651,85 @@ Error MCP251863::configureDevice(const InitConfig& config) {
     MCP_TRY(writeReg(to_underlying(RegisterAddress::REG_MCP_C1RXOVIF), reg));
     MCP_TRY(writeReg(to_underlying(RegisterAddress::REG_MCP_C1TXATIF), reg));
     InterruptEnable interrupts[] = {
-        INT_EN_MCP_RXIE, // RX
-        INT_EN_MCP_TXIE, // TX
-        INT_EN_MCP_RXOVIE, // RX overflow
-        INT_EN_MCP_TXATIE, // transmit attempt
-        INT_EN_MCP_CERRIE, // CAN bus error
-        INT_EN_MCP_SERRIE, // system error
+        INT_EN_MCP_RXIE,    // RX
+        INT_EN_MCP_TXIE,    // TX
+        INT_EN_MCP_RXOVIE,  // RX overflow
+        INT_EN_MCP_TXATIE,  // transmit attempt
+        INT_EN_MCP_CERRIE,  // CAN bus error
+        INT_EN_MCP_SERRIE,  // system error
     };
     MCP_TRY(setInterrupts(interrupts, sizeof(interrupts) / sizeof(interrupts[0])));
     MCP_TRY(initDMA());
     return setTransceiverMode(TransceiverMode::TMODE_MCP_NORM);
 }
 
-
 Error MCP251863::begin() {
     MCP_TRY(setControllerMode(ControllerMode::CMODE_MCP_CFD_NORM));
     return waitForOpMode(ControllerMode::CMODE_MCP_CFD_NORM);
 }
 
-
 Error MCP251863::recover() {
     const InitConfig cfg = lastConfig;
-    const Error err = init(cfg);
+    const Error err      = init(cfg);
     if (err == Error::None) {
         stats.recoveries++;
     }
     return err;
 }
 
-
 Error MCP251863::setBitTiming(BitTiming nominalTiming, BitTiming dataTiming) {
     MCP_TRY(validate_bit_timing(nominalTiming, dataTiming));
 
+    MCP_TRY(writeReg(to_underlying(RegisterAddress::REG_MCP_C1NBTCFG),
+                     pack_nominal_bit_timing(nominalTiming)));
 
-    MCP_TRY(writeReg(
-        to_underlying(RegisterAddress::REG_MCP_C1NBTCFG), pack_nominal_bit_timing(nominalTiming)));
-
-
-    return writeReg(
-        to_underlying(RegisterAddress::REG_MCP_C1DBTCFG), pack_data_bit_timing(dataTiming));
+    return writeReg(to_underlying(RegisterAddress::REG_MCP_C1DBTCFG),
+                    pack_data_bit_timing(dataTiming));
 }
-
 
 Error MCP251863::reset() {
     if (fifo_op_state != FifoOperationState::IDLE) {
         return Error::Busy;
     }
 
-
-    Command cmd = Command::CMD_MCP_RESET;
+    Command cmd        = Command::CMD_MCP_RESET;
     uint8_t message[2] = {0};
 
-
     message[0] = to_underlying(cmd) << 4;
-
 
     csSelect();
     spi_write_blocking(spi_, message, 2);
     csDeselect();
 
-
     return Error::None;
 }
 
-
 Error MCP251863::configureTxFifo(uint8_t fifoNum) {
-    return configureTxFifo(fifoNum, 0); // don't care about priority
+    return configureTxFifo(fifoNum, 0);  // don't care about priority
 }
-
 
 Error MCP251863::configureTxFifo(uint8_t fifoNum, uint8_t prioNum) {
     FifoInterruptFlag txFlags[] = {FIFO_INT_MCP_NFNE, FIFO_INT_MCP_TXAT};
-    MCP_TRY(initGeneralPurposeFifo(
-        fifoNum,
-        FifoMode::FIFO_MODE_MCP_TX,
-        lastConfig.txPayloadSize,
-        lastConfig.txFifoDepth,
-        prioNum, // prioNum
-        TxRetransmitMode::TXRET_MCP_UNLIM,
-        txFlags,
-        2));
-    fifoInfo[fifoNum].configured   = true;
-    fifoInfo[fifoNum].isTx         = true;
+    MCP_TRY(initGeneralPurposeFifo(fifoNum, FifoMode::FIFO_MODE_MCP_TX, lastConfig.txPayloadSize,
+                                   lastConfig.txFifoDepth,
+                                   prioNum,  // prioNum
+                                   TxRetransmitMode::TXRET_MCP_UNLIM, txFlags, 2));
+    fifoInfo[fifoNum].configured = true;
+    fifoInfo[fifoNum].isTx       = true;
     return Error::None;
 }
 
-
 Error MCP251863::configureRxFifo(uint8_t fifoNum, uint8_t fltNum, uint16_t canSID) {
     FifoInterruptFlag rxFlags[] = {FIFO_INT_MCP_NFNE, FIFO_INT_MCP_OVFL};
-    MCP_TRY(initGeneralPurposeFifo(
-        fifoNum,
-        FifoMode::FIFO_MODE_MCP_RX,
-        lastConfig.rxPayloadSize,
-        lastConfig.rxFifoDepth,
-        0, // prioNum : don't care for RX
-        TxRetransmitMode::TXRET_MCP_NONE, // don't care
-        rxFlags,
-        2));
+    MCP_TRY(initGeneralPurposeFifo(fifoNum, FifoMode::FIFO_MODE_MCP_RX, lastConfig.rxPayloadSize,
+                                   lastConfig.rxFifoDepth,
+                                   0,                                 // prioNum : don't care for RX
+                                   TxRetransmitMode::TXRET_MCP_NONE,  // don't care
+                                   rxFlags, 2));
     MCP_TRY(initFilter(fltNum, fifoNum, canSID));
-    fifoInfo[fifoNum].configured   = true;
-    fifoInfo[fifoNum].isTx         = false;
-    fifoInfo[fifoNum].rxFltNum     = fltNum;
+    fifoInfo[fifoNum].configured = true;
+    fifoInfo[fifoNum].isTx       = false;
+    fifoInfo[fifoNum].rxFltNum   = fltNum;
     return Error::None;
 }
 
@@ -925,15 +737,9 @@ Error MCP251863::configureRxFifo(uint8_t fifoNum, uint16_t canSID) {
     return configureRxFifo(fifoNum, fifoNum, canSID);
 }
 
-Error MCP251863::initGeneralPurposeFifo(
-    uint8_t fifoNum,
-    FifoMode fifoMode,
-    FifoPayloadSize plSize,
-    uint8_t fSize,
-    uint8_t prioNum,
-    TxRetransmitMode retranMode,
-    FifoInterruptFlag* intFlagArray,
-    size_t intFlagSize) {
+Error MCP251863::initGeneralPurposeFifo(uint8_t fifoNum, FifoMode fifoMode, FifoPayloadSize plSize,
+                                        uint8_t fSize, uint8_t prioNum, TxRetransmitMode retranMode,
+                                        FifoInterruptFlag* intFlagArray, size_t intFlagSize) {
     if (fifoNum > 30) {
         return Error::InvalidFifoNum;
     }
@@ -951,16 +757,13 @@ Error MCP251863::initGeneralPurposeFifo(
         return Error::NullPointer;
     }
 
-
     uint8_t buff[4];
     uint16_t addr = to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * fifoNum;
-
 
     uint8_t intFlags = 0;
     for (size_t i = 0; i < intFlagSize; i++) {
         intFlags |= static_cast<uint8_t>(intFlagArray[i]);
     }
-
 
     buff[0] = intFlags | (to_underlying(fifoMode) << 7);
     buff[1] = 0b00000000;
@@ -968,11 +771,9 @@ Error MCP251863::initGeneralPurposeFifo(
     // FSIZE stores depth-1 (0 = 1 message; 31 = 32 messages); caller passes 1..32
     buff[3] = ((to_underlying(plSize) & 0b111) << 5) | ((fSize - 1) & 0x1F);
 
-
     MCP_TRY(writeAddr(addr, buff, 4));
     return Error::None;
 }
-
 
 Error MCP251863::disableFifo(uint8_t fifoNum) {
     if (fifoNum > 30) {
@@ -986,18 +787,15 @@ Error MCP251863::disableFifo(uint8_t fifoNum) {
     MCP_TRY(updateByte(addr, 0x00, 0b00000100));
     // disable Filter attached to FIFO if FIFO is RX
     if (!fifoInfo[fifoNum].isTx) {
-        uint8_t flt_num = fifoInfo[fifoNum].rxFltNum;
-        uint16_t flt_addr      = to_underlying(RegisterAddress::REG_MCP_C1FLTCONx) + flt_num;
-        uint16_t flt_obj_addr  = to_underlying(RegisterAddress::REG_MCP_C1FLTOBJx) + 8 * flt_num;
-
+        uint8_t flt_num       = fifoInfo[fifoNum].rxFltNum;
+        uint16_t flt_addr     = to_underlying(RegisterAddress::REG_MCP_C1FLTCONx) + flt_num;
+        uint16_t flt_obj_addr = to_underlying(RegisterAddress::REG_MCP_C1FLTOBJx) + 8 * flt_num;
 
         uint8_t buff[4];
-
 
         // Disable Filter
         buff[0] = 0x00;
         MCP_TRY(writeAddr(flt_addr, buff, 1));
-
 
         // Reset Filter ID
         buff[0] = 0x00;
@@ -1007,14 +805,12 @@ Error MCP251863::disableFifo(uint8_t fifoNum) {
         MCP_TRY(writeAddr(flt_obj_addr, buff, 4));
     }
 
-
     fifoInfo[fifoNum].configured = false;
     return Error::None;
 }
 
-
-Error MCP251863::initTransmitEventFifo(
-    uint8_t fSize, FifoInterruptFlag* intFlagArray, size_t intFlagSize) {
+Error MCP251863::initTransmitEventFifo(uint8_t fSize, FifoInterruptFlag* intFlagArray,
+                                       size_t intFlagSize) {
     if (fSize < 1 || fSize > 32) {
         return Error::InvalidFifoDepth;
     }
@@ -1022,34 +818,25 @@ Error MCP251863::initTransmitEventFifo(
         return Error::NullPointer;
     }
 
-
     uint8_t buff[4];
     uint16_t addr = to_underlying(RegisterAddress::REG_MCP_C1TEFCON);
-
 
     uint8_t intFlags = 0;
     for (size_t i = 0; i < intFlagSize; i++) {
         intFlags |= static_cast<uint8_t>(intFlagArray[i]);
     }
 
-
     buff[0] = 0b00000000 | intFlags;
     buff[1] = 0b00000000;
     buff[2] = 0b00000000;
     buff[3] = (fSize - 1) & 0x1F;
 
-
     return writeAddr(addr, buff, 4);
 }
 
-
-Error MCP251863::initTransmitQueue(
-    FifoPayloadSize plSize,
-    uint8_t fSize,
-    uint8_t prioNum,
-    TxRetransmitMode retranMode,
-    FifoInterruptFlag* intFlagArray,
-    size_t intFlagSize) {
+Error MCP251863::initTransmitQueue(FifoPayloadSize plSize, uint8_t fSize, uint8_t prioNum,
+                                   TxRetransmitMode retranMode, FifoInterruptFlag* intFlagArray,
+                                   size_t intFlagSize) {
     if (fSize < 1 || fSize > 32) {
         return Error::InvalidFifoDepth;
     }
@@ -1063,30 +850,23 @@ Error MCP251863::initTransmitQueue(
         return Error::NullPointer;
     }
 
-
     uint8_t buff[4];
     uint16_t addr = to_underlying(RegisterAddress::REG_MCP_C1TXQCON);
-
 
     uint8_t intFlags = 0;
     for (size_t i = 0; i < intFlagSize; i++) {
         intFlags |= static_cast<uint8_t>(intFlagArray[i]);
     }
 
-
-    MCP_TRY(pollRegisterBit(
-        addr + 1, 0x04, false, Error::PollTimeout));
-
+    MCP_TRY(pollRegisterBit(addr + 1, 0x04, false, Error::PollTimeout));
 
     buff[0] = 0b00000000 | intFlags;
     buff[1] = 0b00000000;
     buff[2] = 0b00000000 | (to_underlying(retranMode) << 5) | prioNum;
     buff[3] = ((to_underlying(plSize) & 0b111) << 5) | ((fSize - 1) & 0x1F);
 
-
     return writeAddr(addr, buff, 4);
 }
-
 
 Error MCP251863::initFilter(uint8_t fltNum, uint8_t fifoNum, uint16_t canSID) {
     if (fltNum > 31) {
@@ -1096,19 +876,15 @@ Error MCP251863::initFilter(uint8_t fltNum, uint8_t fifoNum, uint16_t canSID) {
         return Error::IdOutOfRange;
     }
 
-
     uint16_t flt_addr      = to_underlying(RegisterAddress::REG_MCP_C1FLTCONx) + fltNum;
     uint16_t flt_obj_addr  = to_underlying(RegisterAddress::REG_MCP_C1FLTOBJx) + 8 * fltNum;
     uint16_t flt_mask_addr = to_underlying(RegisterAddress::REG_MCP_C1MASKx) + 8 * fltNum;
 
-
     uint8_t buff[4];
-
 
     // CiFLTOBJm can only be modified while the filter is disabled
     buff[0] = 0x00;
     MCP_TRY(writeAddr(flt_addr, buff, 1));
-
 
     // Supports standard ID only
     buff[0] = canSID & 0xFF;
@@ -1117,7 +893,6 @@ Error MCP251863::initFilter(uint8_t fltNum, uint8_t fifoNum, uint16_t canSID) {
     buff[3] = 0x00;
     MCP_TRY(writeAddr(flt_obj_addr, buff, 4));
 
-
     // Set mask (so only the correct ID is accepted)
     buff[0] = 0xFF;        // MSID<7:0>
     buff[1] = 0x07;        // MSID<10:8>
@@ -1125,16 +900,14 @@ Error MCP251863::initFilter(uint8_t fltNum, uint8_t fifoNum, uint16_t canSID) {
     buff[3] = 0b01000000;  // MIDE = 1; MSID11 = 0 (don't care)
     MCP_TRY(writeAddr(flt_mask_addr, buff, 4));
 
-
     // Re-enable
     buff[0] = 0b00000000 | (fifoNum + 1) | (1 << 7);
     return writeAddr(flt_addr, buff, 1);
 }
 
-
-Error MCP251863::start_push_canfd(
-    uint8_t fifoNum, uint32_t id, const uint8_t* data, size_t len, bool brs, bool extended_id) {
-        if (len > MCP251863_MAX_PAYLOAD) {
+Error MCP251863::start_push_canfd(uint8_t fifoNum, uint32_t id, const uint8_t* data, size_t len,
+                                  bool brs, bool extended_id) {
+    if (len > MCP251863_MAX_PAYLOAD) {
         return Error::InvalidPayloadSize;
     }
     auto dlc_opt = canfd_len_to_dlc(len);
@@ -1151,7 +924,7 @@ Error MCP251863::start_push_canfd(
     frame.brs = brs;
     frame.len = len;
     frame.dlc = to_underlying(*dlc_opt);
-    for (size_t i=0; i<len; i++) {
+    for (size_t i = 0; i < len; i++) {
         frame.data[i] = data[i];
     }
     return start_push_frame(fifoNum, frame);
@@ -1166,12 +939,10 @@ Error MCP251863::start_push_frame(uint8_t fifoNum, const CanFdFrame& frame) {
     if (fifo_op_state != FifoOperationState::IDLE) {
         return Error::Busy;
     }
-    uint16_t fifo_stat_addr =
-        to_underlying(RegisterAddress::REG_MCP_C1FIFOSTAx) + 12 * fifoNum;
-    uint16_t fifo_point_addr =
-        to_underlying(RegisterAddress::REG_MCP_C1FIFOUAx) + 12 * fifoNum;
-    user_fifo_addr = to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * fifoNum;
-    uint8_t stat = 0;
+    uint16_t fifo_stat_addr  = to_underlying(RegisterAddress::REG_MCP_C1FIFOSTAx) + 12 * fifoNum;
+    uint16_t fifo_point_addr = to_underlying(RegisterAddress::REG_MCP_C1FIFOUAx) + 12 * fifoNum;
+    user_fifo_addr           = to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * fifoNum;
+    uint8_t stat             = 0;
     MCP_TRY(readAddr(fifo_stat_addr, &stat, 1));
     if ((stat & 0b00000001) == 0) {
         stats.tx_fifo_full_events++;
@@ -1179,14 +950,13 @@ Error MCP251863::start_push_frame(uint8_t fifoNum, const CanFdFrame& frame) {
     }
     uint16_t message_addr = 0;
     MCP_TRY(readFifoUserAddress(fifo_point_addr, objectSize, &message_addr));
-    fifo_op_state = FifoOperationState::PUSHING;
+    fifo_op_state   = FifoOperationState::PUSHING;
     const Error err = dmaWriteAddr(message_addr, message, objectSize);
     if (err != Error::None) {
         fifo_op_state = FifoOperationState::IDLE;
     }
     return err;
 }
-
 
 Error MCP251863::poll_push() {
     if (fifo_op_state == FifoOperationState::PUSH_DONE) {
@@ -1201,17 +971,14 @@ Error MCP251863::poll_push() {
     return Error::NoOperationPending;
 }
 
-
 Error MCP251863::request_send(uint8_t fifoNum) {
     MCP_TRY(checkFifo(fifoNum, true));
     uint16_t addr = to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * fifoNum;
-    MCP_TRY(pollRegisterBit(
-        addr + 1, 0b00000001, false, Error::PollTimeout));
+    MCP_TRY(pollRegisterBit(addr + 1, 0b00000001, false, Error::PollTimeout));
     MCP_TRY(updateByte(addr + 1, 0x00, 0b00000010));  // TXREQ
     stats.frames_tx_requested++;
     return Error::None;
 }
-
 
 Error MCP251863::clear_send() {
     if (fifo_op_state == FifoOperationState::PUSHING) {
@@ -1224,21 +991,18 @@ Error MCP251863::clear_send() {
     return Error::None;
 }
 
-
 Error MCP251863::start_pop_canfd(uint8_t fifoNum) {
     MCP_TRY(checkFifo(fifoNum, false));
     if (fifo_op_state != FifoOperationState::IDLE) {
         return Error::Busy;
     }
-    user_fifo_addr = to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * fifoNum;
-    uint16_t fifo_stat_addr =
-        to_underlying(RegisterAddress::REG_MCP_C1FIFOSTAx) + 12 * fifoNum;
-    uint16_t fifo_point_addr =
-        to_underlying(RegisterAddress::REG_MCP_C1FIFOUAx) + 12 * fifoNum;
-    uint8_t buff = 0;
-    uint16_t message_addr = 0;
-    uint8_t header[12] = {0};
-    size_t headerSize  = rxTimestampsEnabled_ ? 12 : 8;
+    user_fifo_addr           = to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * fifoNum;
+    uint16_t fifo_stat_addr  = to_underlying(RegisterAddress::REG_MCP_C1FIFOSTAx) + 12 * fifoNum;
+    uint16_t fifo_point_addr = to_underlying(RegisterAddress::REG_MCP_C1FIFOUAx) + 12 * fifoNum;
+    uint8_t buff             = 0;
+    uint16_t message_addr    = 0;
+    uint8_t header[12]       = {0};
+    size_t headerSize        = rxTimestampsEnabled_ ? 12 : 8;
     MCP_TRY(readAddr(fifo_stat_addr, &buff, 1));
     if ((buff & 0b00000001) == 0) {
         return Error::RxFifoEmpty;
@@ -1247,19 +1011,18 @@ Error MCP251863::start_pop_canfd(uint8_t fifoNum) {
     MCP_TRY(readAddr(message_addr, header, headerSize));
     user_frame = decode_rx_header(header, rxTimestampsEnabled_);
     if (user_frame.len > 0) {
-        fifo_op_state = FifoOperationState::POPPING;
+        fifo_op_state   = FifoOperationState::POPPING;
         const Error err = dmaReadAddr(message_addr + headerSize, user_frame.data, user_frame.len);
         if (err != Error::None) {
             fifo_op_state = FifoOperationState::IDLE;
         }
         return err;
     }
-    user_frame.valid = 1;
+    user_frame.valid  = 1;
     pending_fifo_uinc = true;
-    fifo_op_state = FifoOperationState::POP_DONE;
+    fifo_op_state     = FifoOperationState::POP_DONE;
     return Error::None;
 }
-
 
 Error MCP251863::poll_pop() {
     if (fifo_op_state == FifoOperationState::POP_DONE) {
@@ -1274,38 +1037,31 @@ Error MCP251863::poll_pop() {
     return Error::NoOperationPending;
 }
 
-
 Result<CanFdFrame> MCP251863::get_read_frame() {
     MCP_TRY(poll_pop());
     fifo_op_state = FifoOperationState::IDLE;
     return user_frame;
 }
 
-
 Result<FifoStatus> MCP251863::getFIFOStatus(uint8_t fifoNum) {
     FifoStatus status{};
 
-
-    uint16_t fifo_stat_addr =
-        to_underlying(RegisterAddress::REG_MCP_C1FIFOSTAx) + 12 * fifoNum;
-    uint32_t reg = 0;
+    uint16_t fifo_stat_addr = to_underlying(RegisterAddress::REG_MCP_C1FIFOSTAx) + 12 * fifoNum;
+    uint32_t reg            = 0;
     MCP_TRY(readReg(fifo_stat_addr, &reg));
 
-
-    status.fifo_num = (reg >> 8) & 0x1F;
-    status.tx_aborted = (reg & (1UL << 7)) != 0;
-    status.tx_lost_arbitration = (reg & (1UL << 6)) != 0;
-    status.tx_error = (reg & (1UL << 5)) != 0;
-    status.tx_attempts_exhausted = (reg & (1UL << 4)) != 0;
-    status.rx_overflow = (reg & (1UL << 3)) != 0;
-    status.empty_or_full = (reg & (1UL << 2)) != 0;
+    status.fifo_num                = (reg >> 8) & 0x1F;
+    status.tx_aborted              = (reg & (1UL << 7)) != 0;
+    status.tx_lost_arbitration     = (reg & (1UL << 6)) != 0;
+    status.tx_error                = (reg & (1UL << 5)) != 0;
+    status.tx_attempts_exhausted   = (reg & (1UL << 4)) != 0;
+    status.rx_overflow             = (reg & (1UL << 3)) != 0;
+    status.empty_or_full           = (reg & (1UL << 2)) != 0;
     status.half_empty_or_half_full = (reg & (1UL << 1)) != 0;
-    status.not_full_or_not_empty = (reg & 1UL) != 0;
-
+    status.not_full_or_not_empty   = (reg & 1UL) != 0;
 
     return status;
 }
-
 
 Result<Status> MCP251863::getStatus() {
     Status status{};
@@ -1320,22 +1076,21 @@ Result<Status> MCP251863::getStatus() {
     MCP_TRY(readReg(to_underlying(RegisterAddress::REG_MCP_C1BDIAGx) + 4, &status.bdiag1));
     MCP_TRY(readReg(to_underlying(RegisterAddress::REG_MCP_CRC), &status.crc));
 
-    status.bus_off              = (status.trec & (1UL << 21)) != 0;
-    status.tx_error_passive     = (status.trec & (1UL << 20)) != 0;
-    status.rx_error_passive     = (status.trec & (1UL << 19)) != 0;
-    status.tx_error_warning     = (status.trec & (1UL << 18)) != 0;
-    status.rx_error_warning     = (status.trec & (1UL << 17)) != 0;
-    status.error_warning        = (status.trec & (1UL << 16)) != 0;
-    status.tx_error_count       = (status.trec >> 8) & 0xFF;
-    status.rx_error_count       = status.trec & 0xFF;
+    status.bus_off          = (status.trec & (1UL << 21)) != 0;
+    status.tx_error_passive = (status.trec & (1UL << 20)) != 0;
+    status.rx_error_passive = (status.trec & (1UL << 19)) != 0;
+    status.tx_error_warning = (status.trec & (1UL << 18)) != 0;
+    status.rx_error_warning = (status.trec & (1UL << 17)) != 0;
+    status.error_warning    = (status.trec & (1UL << 16)) != 0;
+    status.tx_error_count   = (status.trec >> 8) & 0xFF;
+    status.rx_error_count   = status.trec & 0xFF;
 
     return status;
 }
 
-
 Error MCP251863::setControllerMode(ControllerMode contMode) {
     const uint16_t addr = to_underlying(RegisterAddress::REG_MCP_C1CON);
-    uint8_t current = 0;
+    uint8_t current     = 0;
     MCP_TRY(readOpMode(&current));
     if (current != to_underlying(ControllerMode::CMODE_MCP_CONF)) {
         MCP_TRY(updateByte(addr + 3, 0b00000111, to_underlying(ControllerMode::CMODE_MCP_CONF)));
@@ -1344,12 +1099,10 @@ Error MCP251863::setControllerMode(ControllerMode contMode) {
     return updateByte(addr + 3, 0b00000111, to_underlying(contMode));
 }
 
-
 Error MCP251863::setTransceiverMode(TransceiverMode mode) {
     gpio_put(standbyPin_, to_underlying(mode));
     return Error::None;
 }
-
 
 Error MCP251863::setInterrupts(InterruptEnable* intEnArray, size_t intEnSize) {
     if (intEnSize > 32) {
@@ -1366,18 +1119,11 @@ Error MCP251863::setInterrupts(InterruptEnable* intEnArray, size_t intEnSize) {
 }
 
 void MCP251863::gpioIrqHandler(uint gpio, uint32_t events) {
-    switch(gpio) {
-        case INT_PIN:
-            instance_->error_flag_pending = true;
-            break;
-        case INT0_PIN:
-            instance_->tx_flag_pending = true;
-            break;
-        case INT1_PIN:
-            instance_->rx_flag_pending = true;
-            break;
-        default:
-            break;
+    switch (gpio) {
+        case INT_PIN: instance_->error_flag_pending = true; break;
+        case INT0_PIN: instance_->tx_flag_pending = true; break;
+        case INT1_PIN: instance_->rx_flag_pending = true; break;
+        default: break;
     }
 }
 
@@ -1386,11 +1132,8 @@ Error MCP251863::enableErrorInterrupts() {
     gpio_init(INT_PIN);
     gpio_set_dir(INT_PIN, GPIO_IN);
     gpio_pull_up(INT_PIN);
-    gpio_set_irq_enabled_with_callback(
-        INT_PIN,
-        GPIO_IRQ_EDGE_FALL,
-        true,
-        &MCP251863::gpioIrqHandler);
+    gpio_set_irq_enabled_with_callback(INT_PIN, GPIO_IRQ_EDGE_FALL, true,
+                                       &MCP251863::gpioIrqHandler);
     return Error::None;
 }
 
@@ -1400,11 +1143,8 @@ Error MCP251863::enableTxInterrupts() {
     gpio_init(INT0_PIN);
     gpio_set_dir(INT0_PIN, GPIO_IN);
     gpio_pull_up(INT0_PIN);
-    gpio_set_irq_enabled_with_callback(
-        INT0_PIN,
-        GPIO_IRQ_EDGE_FALL,
-        true,
-        &MCP251863::gpioIrqHandler);
+    gpio_set_irq_enabled_with_callback(INT0_PIN, GPIO_IRQ_EDGE_FALL, true,
+                                       &MCP251863::gpioIrqHandler);
     return Error::None;
 }
 
@@ -1414,12 +1154,8 @@ Error MCP251863::enableRxInterrupts() {
     gpio_init(INT1_PIN);
     gpio_set_dir(INT1_PIN, GPIO_IN);
     gpio_pull_up(INT1_PIN);
-    gpio_set_irq_enabled_with_callback(
-        INT1_PIN,
-        GPIO_IRQ_EDGE_FALL
-        ,
-        true,
-        &MCP251863::gpioIrqHandler);
+    gpio_set_irq_enabled_with_callback(INT1_PIN, GPIO_IRQ_EDGE_FALL, true,
+                                       &MCP251863::gpioIrqHandler);
     return Error::None;
 }
 
@@ -1437,8 +1173,7 @@ Error MCP251863::setPinMode(IoPin pin, IoMode mode) {
                 buff[3] |= 0b00000001;
                 break;
             case IoMode::IOMODE_MCP_INT: buff[3] &= 0b11111110; break;
-            default:
-                return Error::InvalidArgument;
+            default: return Error::InvalidArgument;
         }
     } else if (pin == IoPin::IO_MCP_INT1) {
         switch (mode) {
@@ -1451,8 +1186,7 @@ Error MCP251863::setPinMode(IoPin pin, IoMode mode) {
                 buff[3] |= 0b00000010;
                 break;
             case IoMode::IOMODE_MCP_INT: buff[3] &= 0b11111101; break;
-            default:
-                return Error::InvalidArgument;
+            default: return Error::InvalidArgument;
         }
     } else {
         return Error::InvalidArgument;
@@ -1460,28 +1194,23 @@ Error MCP251863::setPinMode(IoPin pin, IoMode mode) {
     return writeAddr(to_underlying(RegisterAddress::REG_MCP_IOCON), buff, 4);
 }
 
-
 // C1VEC layout
 // 31:24 rxcode (third byte)
 // 23:16 txcode (second byte)
 // 12:8 filhit (first byte, + some offset stuff)
 // 7:0 icode (zeroth byte)
 
-
 Result<int> MCP251863::getTXCode() {
     uint8_t buff = 0;
     MCP_TRY(readAddr(to_underlying(RegisterAddress::REG_MCP_C1VEC) + 2, &buff, 1));
-    return static_cast<int>(buff &
-        0x7F);
+    return static_cast<int>(buff & 0x7F);
 }
-
 
 Result<int> MCP251863::getRXCode() {
     uint8_t buff = 0;
     MCP_TRY(readAddr(to_underlying(RegisterAddress::REG_MCP_C1VEC) + 3, &buff, 1));
     return static_cast<int>(buff & 0x7F);
 }
-
 
 Result<int> MCP251863::getFLTCode() {
     // its 5 bits so we mask with 0x1F instead of 0x7F

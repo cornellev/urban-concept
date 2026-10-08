@@ -1,7 +1,8 @@
 #include <stdio.h>
-#include "pico/stdlib.h"
+
 #include "hardware/spi.h"
 #include "mcp251863.hpp"
+#include "pico/stdlib.h"
 
 static constexpr uint SPI_SCK  = 22;
 static constexpr uint SPI_TX   = 23;
@@ -17,8 +18,8 @@ int main() {
     spi_init(spi0, MCP251863_BAUD_RATE);
     spi_set_format(spi0, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
     gpio_set_function(SPI_SCK, GPIO_FUNC_SPI);
-    gpio_set_function(SPI_TX,  GPIO_FUNC_SPI);
-    gpio_set_function(SPI_RX,  GPIO_FUNC_SPI);
+    gpio_set_function(SPI_TX, GPIO_FUNC_SPI);
+    gpio_set_function(SPI_RX, GPIO_FUNC_SPI);
 
     MCP251863 mcp(spi0, CS_PIN, STBY_PIN);
 
@@ -30,17 +31,17 @@ int main() {
 
     mcp.configureTxFifo(0);
     mcp.configureTxFifo(1);
-    mcp.configureTxFifo(2); // make them all have the same priority
+    mcp.configureTxFifo(2);  // make them all have the same priority
 
     mcp.begin();
 
     uint8_t data0[8] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
     uint8_t data1[8] = {0x00, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E};
     uint8_t data2[8] = {0x00, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17};
-    uint32_t id0 = 0x001;
-    uint32_t id1 = 0x002;
-    uint32_t id2 = 0x003;
-    int count = 0;
+    uint32_t id0     = 0x001;
+    uint32_t id1     = 0x002;
+    uint32_t id2     = 0x003;
+    int count        = 0;
 
     printf("Make it to here.\n");
 
@@ -88,8 +89,8 @@ int main() {
         // Polling information
         if (count % 10 == 0) {
             Status s = mcp.getStatus().value();
-            printf("bus_off=%d tx_err=%d tx_count=%d\n",
-                s.bus_off, s.tx_error_passive, s.tx_error_count);
+            printf("bus_off=%d tx_err=%d tx_count=%d\n", s.bus_off, s.tx_error_passive,
+                   s.tx_error_count);
         }
 
         count++;

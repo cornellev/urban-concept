@@ -1,7 +1,8 @@
 #include <stdio.h>
-#include "pico/stdlib.h"
+
 #include "hardware/spi.h"
 #include "mcp251863.hpp"
+#include "pico/stdlib.h"
 
 static constexpr uint SPI_SCK  = 22;
 static constexpr uint SPI_TX   = 23;
@@ -10,8 +11,8 @@ static constexpr uint CS_PIN   = 21;
 static constexpr uint STBY_PIN = 24;
 
 static void print_frame(const CanFdFrame& frame) {
-    printf("id=0x%03X  len=%d  fdf=%d  brs=%d  ide=%d  esi=%d  filter=%d  data=",
-        frame.id, frame.len, frame.fdf, frame.brs, frame.ide, frame.esi, frame.filter_hit);
+    printf("id=0x%03X  len=%d  fdf=%d  brs=%d  ide=%d  esi=%d  filter=%d  data=", frame.id,
+           frame.len, frame.fdf, frame.brs, frame.ide, frame.esi, frame.filter_hit);
     for (int i = 0; i < frame.len; i++) {
         printf("%02X ", frame.data[i]);
     }
@@ -26,8 +27,8 @@ int main() {
     spi_init(spi0, MCP251863_BAUD_RATE);
     spi_set_format(spi0, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
     gpio_set_function(SPI_SCK, GPIO_FUNC_SPI);
-    gpio_set_function(SPI_TX,  GPIO_FUNC_SPI);
-    gpio_set_function(SPI_RX,  GPIO_FUNC_SPI);
+    gpio_set_function(SPI_TX, GPIO_FUNC_SPI);
+    gpio_set_function(SPI_RX, GPIO_FUNC_SPI);
 
     MCP251863 mcp(spi0, CS_PIN, STBY_PIN);
 
@@ -53,7 +54,9 @@ int main() {
 
             Error err = mcp.start_pop_canfd(0);
             if (err == Error::None) {
-                while (mcp.poll_pop() == Error::Busy) { tight_loop_contents(); }
+                while (mcp.poll_pop() == Error::Busy) {
+                    tight_loop_contents();
+                }
                 CanFdFrame frame = mcp.get_read_frame().value();
                 if (frame.valid) {
                     received++;
