@@ -8,6 +8,9 @@ static constexpr uint SPI_TX   = 23;
 static constexpr uint SPI_RX   = 20;
 static constexpr uint CS_PIN   = 21;
 static constexpr uint STBY_PIN = 24;
+static constexpr uint INT_PIN  = 25;
+static constexpr uint INT0_PIN = 26;
+static constexpr uint INT1_PIN = 27;
 
 int main() {
     stdio_init_all();
@@ -20,7 +23,7 @@ int main() {
     gpio_set_function(SPI_TX,  GPIO_FUNC_SPI);
     gpio_set_function(SPI_RX,  GPIO_FUNC_SPI);
 
-    MCP251863 mcp(spi0, CS_PIN, STBY_PIN);
+    MCP251863 mcp(spi0, CS_PIN, STBY_PIN, INT_PIN, INT0_PIN, INT1_PIN);
 
     if (mcp.init() != Error::None) {
         printf("init failed\n");
