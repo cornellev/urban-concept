@@ -22,8 +22,6 @@ const uint MCP251863_BAUD_RATE = 16000000;
 const uint MAX_TRANSFER = 80; // 2 cmd + 8 header + 4 opt. rx timestamp + 64 payload + 2 crc
 const uint MCP251863_MAX_PAYLOAD = 64;
 
-// REMOVED HARDCODED INT_PIN / INT0_PIN / INT1_PIN (25/26/27) -- NOW PASSED INTO THE CONSTRUCTOR
-
 enum class Error : uint8_t {
     None = 0x00,
  
