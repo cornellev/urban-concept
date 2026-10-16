@@ -10,16 +10,18 @@
 #include "hardware/dma.h"
 #include "hardware/irq.h"
 #include "pico/stdlib.h"
+
+#include <optional>
+#include <type_traits>
+
+
+// implementation of C++23 std::to_underlying
  
 // Constants and magic numbers
 const uint MCP251863_BAUD_RATE = 16000000;
 const uint MAX_TRANSFER = 80; // 2 cmd + 8 header + 4 opt. rx timestamp + 64 payload + 2 crc
 const uint MCP251863_MAX_PAYLOAD = 64;
 
-const uint INT_PIN = 25;
-const uint INT0_PIN = 26;
-const uint INT1_PIN = 27;
- 
 enum class Error : uint8_t {
     None = 0x00,
  
@@ -451,6 +453,7 @@ class MCP251863 {
     spi_inst_t* spi_;
     uint chipSelectPin_;
     uint standbyPin_;
+    uint intPin_, int0Pin_, int1Pin_; 
     WriteMode writeMode_;
     ReadMode readMode_;
     bool rxTimestampsEnabled_;
@@ -482,14 +485,10 @@ class MCP251863 {
     Error dmaReadAddr(uint16_t startAddr, uint8_t* dst, size_t len);
     Error dmaWriteAddr(uint16_t startAddr, const uint8_t* data, size_t len);
  
-    // Blocking SPI read/write transactions
-    Error readAddr(uint16_t startAddr, uint8_t* dst, size_t len);
-    Error writeAddr(uint16_t startAddr, const uint8_t* data, size_t len);
  
     // Helper functions
     Error readReg(uint16_t addr, uint32_t* dst);
     Error writeReg(uint16_t addr, uint32_t value);
-    Error readOpMode(uint8_t* opmod);
     Error waitForOpMode(ControllerMode target);
     Error waitForOpMode(ControllerMode target, int maxIters, uint32_t delayUs);
     Error pollRegisterBit(uint16_t addr, uint8_t mask, bool wantSet, Error timeoutType);
@@ -529,8 +528,12 @@ class MCP251863 {
     Error setInterrupts(InterruptEnable* intEnArray, size_t intEnSize);
  
    public:
+    Error readOpMode(uint8_t* opmod);
+    // Blocking SPI read/write transactions
+    Error readAddr(uint16_t startAddr, uint8_t* dst, size_t len);
+    Error writeAddr(uint16_t startAddr, const uint8_t* data, size_t len);
     // make a driver bound to SPI and the pins
-    MCP251863(spi_inst_t* ispi, uint iCSPin, uint iSTBYPin);
+    MCP251863(spi_inst_t* ispi, uint iCSPin, uint iSTBYPin, uint iINTPin, uint iINT0Pin, uint iINT1Pin);
 
     // initialize the controller with defaults
     Error init();

@@ -125,7 +125,6 @@ uint32_t encode_tdc(bool enable, uint8_t offset) {
         return 0;
     }
 
-
     // 10 at bits 17:16 for TDCMOD auto
     // TDCO at bits 14:6
     return (2UL << 16) | ((offset & 0x3F) << 8);
@@ -135,13 +134,11 @@ uint32_t encode_tdc(bool enable, uint8_t offset) {
 InitConfig default_init_config() {
     InitConfig config{};
 
-
     config.enablePll = 0;
     config.sclkDiv2 = 0;
     config.enableTdc = 1;
     config.rxTimestampEnable = 0;
     config.tdcOffset = 6;
-
 
     // FIFO depth is the number of message slots, 1..32
     // FSIZE register field stores it as 0..31
@@ -149,15 +146,12 @@ InitConfig default_init_config() {
     config.txFifoDepth = 8;
     config.rxFifoDepth = 8;
 
-
     config.txPayloadSize = FifoPayloadSize::FIFO_PLSIZE_64;
     config.rxPayloadSize = FifoPayloadSize::FIFO_PLSIZE_64;
-
 
     // Defaults assume a 40 MHz CAN clock: nominal 500 kbit/s, data 2 Mbit/s.
     config.nominalBitTiming = kBitTiming500K40MHz;
     config.dataBitTiming    = kBitTiming2M40MHz;
-
 
     return config;
 }
@@ -167,7 +161,6 @@ uint32_t pack_id_word(const CanFdFrame& frame) {
     if (frame.ide) {
         return ((frame.id >> 18) & 0x7FF) | ((frame.id & 0x3FFFF) << 11);
     }
-
 
     uint32_t sid = frame.id & 0x7FF;
     uint32_t sid11 = (frame.sid11 || (frame.id > 0x7FF)) ? ((frame.id >> 11) & 0x01) : 0;
@@ -211,7 +204,6 @@ Error finalize_frame_dlc(CanFdFrame* frame) {
         return Error::None;
     }
 
-
     if (frame->len > 8) {
         return Error::InvalidPayloadSize;
     }
@@ -240,7 +232,6 @@ Error validate_tx_frame(const CanFdFrame& frame) {
 
 CanFdFrame decode_rx_header(const uint8_t* header, bool timestampEnabled) {
     CanFdFrame frame{};
-
 
     uint32_t word0 = load_word(header);
     uint32_t word1 = load_word(header + 4);
@@ -275,10 +266,8 @@ Error create_message_obj(uint8_t* dst, const CanFdFrame& frame, size_t* objectSi
     MCP_TRY(validate_tx_frame(txFrame));
     MCP_TRY(finalize_frame_dlc(&txFrame));
 
-
     size_t rawSize = 8 + (size_t)txFrame.len;
     size_t objSize = (rawSize + 3) & ~static_cast<size_t>(3); // round up to multiple of 4
-
 
     memset(dst, 0, objSize);
     store_word(dst, pack_id_word(txFrame));
@@ -286,7 +275,6 @@ Error create_message_obj(uint8_t* dst, const CanFdFrame& frame, size_t* objectSi
     for (uint8_t i=0; i<txFrame.len; i++) {
         dst[8+i] = txFrame.data[i];
     }
-
 
     if (objectSize != NULL) {
         *objectSize = objSize;
@@ -298,10 +286,13 @@ Error create_message_obj(uint8_t* dst, const CanFdFrame& frame, size_t* objectSi
 }  // namespace
 
 
-MCP251863::MCP251863(spi_inst_t *ispi, uint iCSPin, uint iSTBYPin) {
+MCP251863::MCP251863(spi_inst_t *ispi, uint iCSPin, uint iSTBYPin, uint iINTPin, uint iINT0Pin, uint iINT1Pin) { 
     spi_                 = ispi;
     chipSelectPin_       = iCSPin;
     standbyPin_          = iSTBYPin;
+    intPin_              = iINTPin;  
+    int0Pin_             = iINT0Pin; 
+    int1Pin_             = iINT1Pin; 
     writeMode_           = WriteMode::WM_MCP_NORM;
     readMode_            = ReadMode::RM_MCP_NORM;
     rxTimestampsEnabled_ = false;
@@ -344,20 +335,15 @@ Error MCP251863::dmaWriteAddr(uint16_t startAddr, const uint8_t* data, size_t le
         return Error::InvalidPayloadSize;
     }
 
-
     // form message CCCC-AAAAAAAAAAAA
     tx_buff[0] = (to_underlying(Command::CMD_MCP_WRITA) << 4) | (startAddr >> 8);
     tx_buff[1] = (startAddr << 4) >> 4;
 
-
     memcpy(&tx_buff[2], data, len);
-
 
     transfer_len = len;
 
-
     spiTransferDMA(len + 2);
-
 
     return Error::None;
 }
@@ -372,16 +358,13 @@ Error MCP251863::writeAddr(uint16_t startAddr, const uint8_t* data, size_t len) 
     // form message CCCC-AAAAAAAAAAAA
     uint8_t message[2];
 
-
     message[0] = (to_underlying(Command::CMD_MCP_WRITA) << 4) | (startAddr >> 8);
     message[1] = (startAddr << 4) >> 4;
-
 
     csSelect();
     spi_write_blocking(spi_, message, 2);
     spi_write_blocking(spi_, data, len);
     csDeselect();
-
 
     return Error::None;
 }
@@ -391,24 +374,20 @@ Error MCP251863::dmaReadAddr(uint16_t startAddr, uint8_t* dst, size_t len) {
     if (dst == nullptr) {
         return Error::NullPointer;
     }
-    if (len + 2 > MAX_TRANSFER) {
+    size_t paddedLen = (len + 3) / 4 * 4 + 2;
+    if (paddedLen > MAX_TRANSFER) { 
         return Error::InvalidPayloadSize;
     }
-
 
     // form message CCCC-AAAAAAAAAAAA
     tx_buff[0] = (to_underlying(Command::CMD_MCP_READA) << 4) | (startAddr >> 8);
     tx_buff[1] = (startAddr << 4) >> 4;
 
-
     user_rx_buff = dst;
-
 
     transfer_len = len;
 
-
-    spiTransferDMA(len + 2);
-
+    spiTransferDMA(paddedLen); 
 
     return Error::None;
 }
@@ -420,17 +399,14 @@ Error MCP251863::readAddr(uint16_t startAddr, uint8_t* dst, size_t len) {
     }
     uint8_t message[2] = {0};
 
-
     // form message CCCC-AAAAAAAAAAAA
     message[0] = (to_underlying(Command::CMD_MCP_READA) << 4) | (startAddr >> 8);
     message[1] = (startAddr << 4) >> 4;
-
 
     csSelect();
     spi_write_blocking(spi_, message, 2);
     spi_read_blocking(spi_, 0, dst, len);
     csDeselect();
-
 
     return Error::None;
 }
@@ -539,6 +515,12 @@ Error MCP251863::readFifoUserAddress(uint16_t fifoPointAddr, size_t objectSize, 
 
 
 Error MCP251863::initDMA() {
+    if (dmaInitialized) {
+        dma_channel_set_irq0_enabled(dma_rx_chan, false);
+        dma_channel_unclaim(dma_tx_chan);
+        dma_channel_unclaim(dma_rx_chan);
+        dmaInitialized = false;
+    }
     int tx = dma_claim_unused_channel(false);
     dma_tx_chan = tx;
     dma_tx_cfg = dma_channel_get_default_config(dma_tx_chan);
@@ -622,24 +604,19 @@ void MCP251863::spiTransferDMA(size_t len) {
     dma_channel_abort(dma_tx_chan);
     dma_channel_abort(dma_rx_chan);
 
-
     // clear overrun and drain RX FIFO
     spi_get_hw(spi_)->icr = SPI_SSPICR_RORIC_BITS;
     while (spi_is_readable(spi_)) {
         (void)spi_get_hw(spi_)->dr;
     }
 
-
     dma_channel_set_read_addr(dma_tx_chan, tx_buff, false);
     dma_channel_set_write_addr(dma_rx_chan, rx_buff, false);
-
 
     dma_channel_set_trans_count(dma_tx_chan, len, false);
     dma_channel_set_trans_count(dma_rx_chan, len, false);
 
-
     gpio_put(chipSelectPin_, 0);
-
 
     // start both DMA channels
     dma_start_channel_mask(
@@ -662,7 +639,6 @@ void MCP251863::finishTransfer() {
         tight_loop_contents();
     }
     gpio_put(chipSelectPin_, 1);
-
 
     if (fifo_op_state == FifoOperationState::POPPING) {
         pending_fifo_uinc = true;
@@ -714,7 +690,6 @@ Error MCP251863::init(const InitConfig& config) {
     }
     MCP_TRY(validate_bit_timing(config.nominalBitTiming, config.dataBitTiming));
 
-
     // Remember the config so recover() can repeat this exact bring-up
     lastConfig = config;
 
@@ -727,10 +702,8 @@ Error MCP251863::init(const InitConfig& config) {
     
     (void)setTransceiverMode(TransceiverMode::TMODE_MCP_STBY);
 
-
     writeMode_ = WriteMode::WM_MCP_NORM;
     readMode_  = ReadMode::RM_MCP_NORM;
-
 
     abort();
     for (FifoInfo& f : fifoInfo) {
@@ -742,14 +715,12 @@ Error MCP251863::init(const InitConfig& config) {
     txerr_latched   = false;
     // could also expose: txbp, rxbp, txwarn, rxwarn, ewarn
 
-
     const Error err = configureDevice(config);
     if (err != Error::None) {
         (void)setTransceiverMode(TransceiverMode::TMODE_MCP_STBY);
         (void)reset();
         return err;
     }
-
 
     return Error::None;
 }
@@ -760,18 +731,14 @@ Error MCP251863::configureDevice(const InitConfig& config) {
     uint8_t one = 0;
     uint32_t reg = 0;
 
-
     MCP_TRY(reset());
     sleep_ms(10);
-
 
     MCP_TRY(pollRegisterBit(
         to_underlying(RegisterAddress::REG_MCP_OSC) + 1, 1 << 2, true,
         Error::OscillatorTimeout));
 
-
     MCP_TRY(setControllerMode(ControllerMode::CMODE_MCP_CONF));
-
 
     uint8_t osc = (config.enablePll ? 0x01 : 0x00) | (config.sclkDiv2 ? 0x10 : 0x00);
     MCP_TRY(writeAddr(to_underlying(RegisterAddress::REG_MCP_OSC), &osc, 1));
@@ -782,7 +749,6 @@ Error MCP251863::configureDevice(const InitConfig& config) {
             Error::PllTimeout));
     }
 
-
     if (config.sclkDiv2) {
         // SCLKRDY
         MCP_TRY(pollRegisterBit(
@@ -790,17 +756,13 @@ Error MCP251863::configureDevice(const InitConfig& config) {
             Error::SclkdivTimeout));
     }
 
-
     MCP_TRY(setBitTiming(config.nominalBitTiming, config.dataBitTiming));
-
 
     MCP_TRY(writeReg(
         to_underlying(RegisterAddress::REG_MCP_C1TDC),
         encode_tdc(config.enableTdc, config.tdcOffset)));
 
-
     rxTimestampsEnabled_ = config.rxTimestampEnable != 0;
-
 
     // FifoInterruptFlag txFlags[] = {FIFO_INT_MCP_NFNE, FIFO_INT_MCO_TXAT};
     // FifoInterruptFlag rxFlags[] = {FIFO_INT_MCP_NFNE, FIFO_INT_MCP_OVFL};
@@ -849,10 +811,8 @@ Error MCP251863::recover() {
 Error MCP251863::setBitTiming(BitTiming nominalTiming, BitTiming dataTiming) {
     MCP_TRY(validate_bit_timing(nominalTiming, dataTiming));
 
-
     MCP_TRY(writeReg(
         to_underlying(RegisterAddress::REG_MCP_C1NBTCFG), pack_nominal_bit_timing(nominalTiming)));
-
 
     return writeReg(
         to_underlying(RegisterAddress::REG_MCP_C1DBTCFG), pack_data_bit_timing(dataTiming));
@@ -864,18 +824,14 @@ Error MCP251863::reset() {
         return Error::Busy;
     }
 
-
     Command cmd = Command::CMD_MCP_RESET;
     uint8_t message[2] = {0};
 
-
     message[0] = to_underlying(cmd) << 4;
-
 
     csSelect();
     spi_write_blocking(spi_, message, 2);
     csDeselect();
-
 
     return Error::None;
 }
@@ -983,21 +939,18 @@ Error MCP251863::disableFifo(uint8_t fifoNum) {
     }
     uint16_t addr = to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * fifoNum;
     // set FRESET bit to reset FIFO
-    MCP_TRY(updateByte(addr, 0x00, 0b00000100));
+    MCP_TRY(updateByte(addr + 1, 0x00, 0b00000100));
     // disable Filter attached to FIFO if FIFO is RX
     if (!fifoInfo[fifoNum].isTx) {
         uint8_t flt_num = fifoInfo[fifoNum].rxFltNum;
         uint16_t flt_addr      = to_underlying(RegisterAddress::REG_MCP_C1FLTCONx) + flt_num;
         uint16_t flt_obj_addr  = to_underlying(RegisterAddress::REG_MCP_C1FLTOBJx) + 8 * flt_num;
 
-
         uint8_t buff[4];
-
 
         // Disable Filter
         buff[0] = 0x00;
         MCP_TRY(writeAddr(flt_addr, buff, 1));
-
 
         // Reset Filter ID
         buff[0] = 0x00;
@@ -1006,7 +959,6 @@ Error MCP251863::disableFifo(uint8_t fifoNum) {
         buff[3] = 0x00;
         MCP_TRY(writeAddr(flt_obj_addr, buff, 4));
     }
-
 
     fifoInfo[fifoNum].configured = false;
     return Error::None;
@@ -1022,22 +974,18 @@ Error MCP251863::initTransmitEventFifo(
         return Error::NullPointer;
     }
 
-
     uint8_t buff[4];
     uint16_t addr = to_underlying(RegisterAddress::REG_MCP_C1TEFCON);
-
 
     uint8_t intFlags = 0;
     for (size_t i = 0; i < intFlagSize; i++) {
         intFlags |= static_cast<uint8_t>(intFlagArray[i]);
     }
 
-
     buff[0] = 0b00000000 | intFlags;
     buff[1] = 0b00000000;
     buff[2] = 0b00000000;
     buff[3] = (fSize - 1) & 0x1F;
-
 
     return writeAddr(addr, buff, 4);
 }
@@ -1063,26 +1011,21 @@ Error MCP251863::initTransmitQueue(
         return Error::NullPointer;
     }
 
-
     uint8_t buff[4];
     uint16_t addr = to_underlying(RegisterAddress::REG_MCP_C1TXQCON);
-
 
     uint8_t intFlags = 0;
     for (size_t i = 0; i < intFlagSize; i++) {
         intFlags |= static_cast<uint8_t>(intFlagArray[i]);
     }
 
-
     MCP_TRY(pollRegisterBit(
         addr + 1, 0x04, false, Error::PollTimeout));
-
 
     buff[0] = 0b00000000 | intFlags;
     buff[1] = 0b00000000;
     buff[2] = 0b00000000 | (to_underlying(retranMode) << 5) | prioNum;
     buff[3] = ((to_underlying(plSize) & 0b111) << 5) | ((fSize - 1) & 0x1F);
-
 
     return writeAddr(addr, buff, 4);
 }
@@ -1096,19 +1039,15 @@ Error MCP251863::initFilter(uint8_t fltNum, uint8_t fifoNum, uint16_t canSID) {
         return Error::IdOutOfRange;
     }
 
-
     uint16_t flt_addr      = to_underlying(RegisterAddress::REG_MCP_C1FLTCONx) + fltNum;
     uint16_t flt_obj_addr  = to_underlying(RegisterAddress::REG_MCP_C1FLTOBJx) + 8 * fltNum;
     uint16_t flt_mask_addr = to_underlying(RegisterAddress::REG_MCP_C1MASKx) + 8 * fltNum;
 
-
     uint8_t buff[4];
-
 
     // CiFLTOBJm can only be modified while the filter is disabled
     buff[0] = 0x00;
     MCP_TRY(writeAddr(flt_addr, buff, 1));
-
 
     // Supports standard ID only
     buff[0] = canSID & 0xFF;
@@ -1117,14 +1056,12 @@ Error MCP251863::initFilter(uint8_t fltNum, uint8_t fifoNum, uint16_t canSID) {
     buff[3] = 0x00;
     MCP_TRY(writeAddr(flt_obj_addr, buff, 4));
 
-
     // Set mask (so only the correct ID is accepted)
     buff[0] = 0xFF;        // MSID<7:0>
     buff[1] = 0x07;        // MSID<10:8>
     buff[2] = 0x00;        // MEID = don't care
     buff[3] = 0b01000000;  // MIDE = 1; MSID11 = 0 (don't care)
     MCP_TRY(writeAddr(flt_mask_addr, buff, 4));
-
 
     // Re-enable
     buff[0] = 0b00000000 | (fifoNum + 1) | (1 << 7);
@@ -1285,12 +1222,10 @@ Result<CanFdFrame> MCP251863::get_read_frame() {
 Result<FifoStatus> MCP251863::getFIFOStatus(uint8_t fifoNum) {
     FifoStatus status{};
 
-
     uint16_t fifo_stat_addr =
         to_underlying(RegisterAddress::REG_MCP_C1FIFOSTAx) + 12 * fifoNum;
     uint32_t reg = 0;
     MCP_TRY(readReg(fifo_stat_addr, &reg));
-
 
     status.fifo_num = (reg >> 8) & 0x1F;
     status.tx_aborted = (reg & (1UL << 7)) != 0;
@@ -1301,7 +1236,6 @@ Result<FifoStatus> MCP251863::getFIFOStatus(uint8_t fifoNum) {
     status.empty_or_full = (reg & (1UL << 2)) != 0;
     status.half_empty_or_half_full = (reg & (1UL << 1)) != 0;
     status.not_full_or_not_empty = (reg & 1UL) != 0;
-
 
     return status;
 }
@@ -1366,28 +1300,22 @@ Error MCP251863::setInterrupts(InterruptEnable* intEnArray, size_t intEnSize) {
 }
 
 void MCP251863::gpioIrqHandler(uint gpio, uint32_t events) {
-    switch(gpio) {
-        case INT_PIN:
-            instance_->error_flag_pending = true;
-            break;
-        case INT0_PIN:
-            instance_->tx_flag_pending = true;
-            break;
-        case INT1_PIN:
-            instance_->rx_flag_pending = true;
-            break;
-        default:
-            break;
+    if (gpio == instance_->intPin_) {
+        instance_->error_flag_pending = true;
+    } else if (gpio == instance_->int0Pin_) {
+        instance_->tx_flag_pending = true;
+    } else if (gpio == instance_->int1Pin_) {
+        instance_->rx_flag_pending = true;
     }
 }
 
 // system error, CAN bus error
 Error MCP251863::enableErrorInterrupts() {
-    gpio_init(INT_PIN);
-    gpio_set_dir(INT_PIN, GPIO_IN);
-    gpio_pull_up(INT_PIN);
+    gpio_init(intPin_);
+    gpio_set_dir(intPin_, GPIO_IN);
+    gpio_pull_up(intPin_);
     gpio_set_irq_enabled_with_callback(
-        INT_PIN,
+        intPin_,
         GPIO_IRQ_EDGE_FALL,
         true,
         &MCP251863::gpioIrqHandler);
@@ -1397,11 +1325,11 @@ Error MCP251863::enableErrorInterrupts() {
 // TXAT, Not Full
 Error MCP251863::enableTxInterrupts() {
     MCP_TRY(setPinMode(IO_MCP_INT0, IOMODE_MCP_INT));
-    gpio_init(INT0_PIN);
-    gpio_set_dir(INT0_PIN, GPIO_IN);
-    gpio_pull_up(INT0_PIN);
+    gpio_init(int0Pin_);
+    gpio_set_dir(int0Pin_, GPIO_IN);
+    gpio_pull_up(int0Pin_);
     gpio_set_irq_enabled_with_callback(
-        INT0_PIN,
+        int0Pin_,
         GPIO_IRQ_EDGE_FALL,
         true,
         &MCP251863::gpioIrqHandler);
@@ -1411,11 +1339,11 @@ Error MCP251863::enableTxInterrupts() {
 // Overflow event, not empty
 Error MCP251863::enableRxInterrupts() {
     MCP_TRY(setPinMode(IO_MCP_INT1, IOMODE_MCP_INT));
-    gpio_init(INT1_PIN);
-    gpio_set_dir(INT1_PIN, GPIO_IN);
-    gpio_pull_up(INT1_PIN);
+    gpio_init(int1Pin_);
+    gpio_set_dir(int1Pin_, GPIO_IN);
+    gpio_pull_up(int1Pin_);
     gpio_set_irq_enabled_with_callback(
-        INT1_PIN,
+        int1Pin_,
         GPIO_IRQ_EDGE_FALL
         ,
         true,
