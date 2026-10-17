@@ -126,3 +126,8 @@ Turn lamps light only while the `kBlinkPhase` bit is set. The VCU toggles it, so
 in phase. A node that hears no `BodyState` for 1 s falls back to safe states: horn off, wiper
 parked, turn signals off, headlights held. A STOP applies the same safe states and latches until
 reset.
+
+front_aux, back_aux, and joulemeter also take a `StatusBlink` `Update` on `0x1NN`, their own
+subaddress, that sets their status LED's blink half-period in ms. They ignore 0, and the period
+returns to the firmware default on reset. Dev boards running `elec/src/spi2canfd` take it too, on
+the shared subaddress `0x40`, so one command reaches every one of them.

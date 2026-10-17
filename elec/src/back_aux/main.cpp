@@ -7,6 +7,7 @@
 #include "common/can_health.hpp"
 #include "common/interval.hpp"
 #include "common/rpm.hpp"
+#include "common/status_blink.hpp"
 #include "config.hpp"
 #include "hardware/adc.h"
 #include "hardware/clocks.h"
@@ -182,6 +183,7 @@ int main() {
                     command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
                 }
             }
+            cev::apply_status_blink(m, kNodeId, blink);
         }
 
         if (time_reached(command_deadline)) {

@@ -29,6 +29,15 @@ TEST_CASE("format_message prints joulemeter floats") {
     CHECK(std::string_view(line.data()) == "joulemeter 47.91 V 3.20 A 153.3 W 812.4 J");
 }
 
+TEST_CASE("format_message prints a status blink command with its target node") {
+    const auto m =
+        make_message(MsgClass::Command, back_aux::kNodeId, MsgType::Update, StatusBlink{250});
+    REQUIRE(m.has_value());
+    std::array<char, 96> line{};
+    format_message(*m, line);
+    CHECK(std::string_view(line.data()) == "status blink 250 ms to 0x20");
+}
+
 TEST_CASE("format_message falls back to the header for a message outside the catalog") {
     const Message m{
         .cls        = MsgClass::Command,

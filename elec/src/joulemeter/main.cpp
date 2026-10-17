@@ -5,6 +5,7 @@
 #include "chuds/mcp_transport.hpp"
 #include "common/can_health.hpp"
 #include "common/interval.hpp"
+#include "common/status_blink.hpp"
 #include "config.hpp"
 #include "hardware/adc.h"
 #include "pico/stdlib.h"
@@ -12,6 +13,8 @@
 using namespace chuds::joulemeter;
 
 constexpr std::uint32_t kBlinkHalfPeriodMs = 500;
+// frames handled per loop pass, the mcp rx fifo depth, so a flooded bus cannot starve the timers
+constexpr int kMaxRxPerPass = 8;
 
 namespace {
 
@@ -78,6 +81,14 @@ int main() {
 
     while (true) {
         can_health.check(bus);
+        for (int i = 0; i < kMaxRxPerPass; ++i) {
+            const auto rx = bus.recv();
+            if (!rx) {
+                break;
+            }
+            cev::apply_status_blink(*rx, kNodeId, blink);
+        }
+
         const float v_bus = raw_to_volts(read_raw(kVoltageAdc)) * kVoltageDividerRatio;
         const float amps =
             (raw_to_volts(read_raw(kCurrentAdc)) - kCurrentZeroVolts) / kCurrentVoltsPerAmp;
