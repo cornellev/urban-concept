@@ -118,8 +118,26 @@ To put a board in BOOTSEL mode:
 - Hold the BOOTSEL button
 - Plug it back in while still holding the button down
 
+If the board already runs our firmware, you can instead press its reset button twice within 200 ms.
+
 In BOOTSEL mode the board shows up as a USB drive called **`RPI-RP2`**. Just drag the
 project's `.uf2` file (see the path above) onto that drive. The board flashes itself and restarts
+
+If a board lights up but never shows up on USB, try another cable. Some USB cables carry only power.
+
+### Flashing a board plugged into a Pi
+
+The Pi doesn't need picotool. Opening the board's serial port at 1200 baud reboots a board running
+our firmware into BOOTSEL. Then copy the `.uf2` onto its drive:
+
+```sh
+stty -F /dev/ttyACM0 1200
+sudo mount /dev/disk/by-label/RPI-RP2 /mnt
+sudo cp front_aux.uf2 /mnt/ && sync
+sudo umount /mnt
+```
+
+With several boards plugged in, pick one by serial number under `/dev/serial/by-id/`.
 
 ## Adding a new board
 

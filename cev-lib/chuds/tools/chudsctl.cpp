@@ -1,3 +1,4 @@
+#include <array>
 #include <charconv>
 #include <chrono>
 #include <csignal>
@@ -5,6 +6,7 @@
 #include <cstdio>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "chuds/chuds.hpp"
 #include "chuds/socketcan_transport.hpp"
@@ -33,7 +35,7 @@ void usage(const char* prog) {
                  "  body [outputs...]    hold a body state until ctrl-c\n"
                  "                       outputs: headlights left right hazards horn wiper\n"
                  "  blink NODE MS        set a node's status LED blink half-period\n"
-                 "                       nodes: front_aux back_aux joulemeter\n"
+                 "                       nodes: front_aux back_aux joulemeter spi2canfd all\n"
                  "  stop [SEVERITY]      send a STOP, 0 (default) is the most severe\n"
                  "                       boards latch it until they reset\n"
                  "\n"
@@ -130,15 +132,22 @@ int run_body(Bus& bus, int argc, char** argv, int first) {
 }
 
 int run_blink(Bus& bus, std::string_view node_name, std::string_view arg) {
-    std::uint8_t node{};
+    constexpr std::array kAllNodes = {chuds::front_aux::kNodeId, chuds::back_aux::kNodeId,
+                                      chuds::joulemeter::kNodeId, chuds::spi2canfd::kNodeId};
+    std::vector<std::uint8_t> nodes;
     if (node_name == "front_aux") {
-        node = chuds::front_aux::kNodeId;
+        nodes = {chuds::front_aux::kNodeId};
     } else if (node_name == "back_aux") {
-        node = chuds::back_aux::kNodeId;
+        nodes = {chuds::back_aux::kNodeId};
     } else if (node_name == "joulemeter") {
-        node = chuds::joulemeter::kNodeId;
+        nodes = {chuds::joulemeter::kNodeId};
+    } else if (node_name == "spi2canfd") {
+        nodes = {chuds::spi2canfd::kNodeId};
+    } else if (node_name == "all") {
+        nodes.assign(kAllNodes.begin(), kAllNodes.end());
     } else {
-        std::fprintf(stderr, "blink node must be front_aux, back_aux, or joulemeter\n");
+        std::fprintf(stderr,
+                     "blink node must be front_aux, back_aux, joulemeter, spi2canfd, or all\n");
         return 2;
     }
     std::uint16_t ms{};
@@ -146,10 +155,14 @@ int run_blink(Bus& bus, std::string_view node_name, std::string_view arg) {
         std::fprintf(stderr, "blink needs a period in ms, 1-65535\n");
         return 2;
     }
-    const auto st =
-        bus.send(chuds::MsgClass::Command, node, chuds::MsgType::Update, chuds::StatusBlink{ms});
-    report("status blink", st);
-    return st ? 0 : 1;
+    bool ok = true;
+    for (const std::uint8_t node : nodes) {
+        const auto st = bus.send(chuds::MsgClass::Command, node, chuds::MsgType::Update,
+                                 chuds::StatusBlink{ms});
+        report("status blink", st);
+        ok = ok && st;
+    }
+    return ok ? 0 : 1;
 }
 
 int run_stop(Bus& bus, std::string_view arg) {

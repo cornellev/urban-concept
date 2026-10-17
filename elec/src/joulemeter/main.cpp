@@ -5,6 +5,7 @@
 #include "chuds/mcp_transport.hpp"
 #include "common/can_health.hpp"
 #include "common/interval.hpp"
+#include "common/rx_log.hpp"
 #include "common/status_blink.hpp"
 #include "config.hpp"
 #include "hardware/adc.h"
@@ -78,6 +79,7 @@ int main() {
     bool led_on{};
     cev::Interval blink{kBlinkHalfPeriodMs};
     cev::CanHealth can_health;
+    cev::RxLog rx_log{kNodeId};
 
     while (true) {
         can_health.check(bus);
@@ -86,6 +88,7 @@ int main() {
             if (!rx) {
                 break;
             }
+            rx_log.log(*rx);
             cev::apply_status_blink(*rx, kNodeId, blink);
         }
 

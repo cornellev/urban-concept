@@ -7,6 +7,7 @@
 #include "common/can_health.hpp"
 #include "common/interval.hpp"
 #include "common/rpm.hpp"
+#include "common/rx_log.hpp"
 #include "common/status_blink.hpp"
 #include "config.hpp"
 #include "hardware/adc.h"
@@ -83,6 +84,7 @@ int main() {
     bool led_on{};
     cev::Interval blink{kBlinkHalfPeriodMs};
     cev::CanHealth can_health;
+    cev::RxLog rx_log{kNodeId};
     absolute_time_t command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
 
     // a hung loop reboots the board instead of freezing its outputs
@@ -97,6 +99,7 @@ int main() {
                 break;
             }
             const chuds::Message& m = *rx;
+            rx_log.log(m);
             if (m.cls == chuds::MsgClass::Emergency && m.type == chuds::MsgType::Stop) {
                 stopped = true;
                 body &= chuds::BodyState::kHeadlights;

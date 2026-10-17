@@ -114,8 +114,8 @@ uint32_t encode_tdc(bool enable, uint8_t offset) {
     }
 
     // 10 at bits 17:16 for TDCMOD auto
-    // TDCO at bits 14:6
-    return (2UL << 16) | ((offset & 0x3F) << 8);
+    // TDCO at bits 14:8
+    return (2UL << 16) | ((offset & 0x7F) << 8);
 }
 
 InitConfig default_init_config() {
@@ -125,7 +125,8 @@ InitConfig default_init_config() {
     config.sclkDiv2          = 0;
     config.enableTdc         = 1;
     config.rxTimestampEnable = 0;
-    config.tdcOffset         = 6;
+    // (DTSEG1 + 1) tq, microchip's value for a 40 MHz clock at 2 Mbit/s
+    config.tdcOffset = 15;
 
     // FIFO depth is the number of message slots, 1..32
     // FSIZE register field stores it as 0..31
