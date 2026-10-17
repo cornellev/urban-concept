@@ -20,7 +20,7 @@ struct BodyState {
     static constexpr std::uint8_t kBlinkPhase = 1 << 5;
 
     std::uint8_t bits{};
-    static constexpr bool chuds_wire_body = true;
+    static constexpr bool is_chuds_wire_body = true;
 };
 static_assert(sizeof(BodyState) == 1);
 
@@ -44,7 +44,7 @@ struct Telemetry {
     std::uint16_t rpm_left{};   // wheel edges in the last window
     std::uint16_t rpm_right{};  // wheel edges in the last window
     std::uint16_t steering{};   // raw adc, 0-4095
-    static constexpr bool chuds_wire_body = true;
+    static constexpr bool is_chuds_wire_body = true;
 };
 static_assert(sizeof(Telemetry) == 6);
 
@@ -60,7 +60,7 @@ struct Telemetry {
     std::uint16_t rpm_left{};   // wheel edges in the last window
     std::uint16_t rpm_right{};  // wheel edges in the last window
     std::uint16_t brake{};      // raw adc, 0-4095
-    static constexpr bool chuds_wire_body = true;
+    static constexpr bool is_chuds_wire_body = true;
 };
 static_assert(sizeof(Telemetry) == 6);
 
@@ -77,7 +77,7 @@ struct Telemetry {
     float current{};  // bus amps, averaged over the report period
     float power{};    // watts, averaged over the report period
     float energy{};   // joules since boot
-    static constexpr bool chuds_wire_body = true;
+    static constexpr bool is_chuds_wire_body = true;
 };
 static_assert(sizeof(Telemetry) == 16);
 
