@@ -499,6 +499,9 @@ Error MCP251863::initDMA() {
 }
 
 void MCP251863::spiTransferDMA(size_t len) {
+    // the irq must reach this object even after the driver was moved
+    instance_ = this;
+
     // abort possible unfinished transactions
     dma_channel_abort(dma_tx_chan);
     dma_channel_abort(dma_rx_chan);
@@ -730,14 +733,15 @@ Error MCP251863::configureTxFifo(uint8_t fifoNum, uint8_t prioNum) {
     return Error::None;
 }
 
-Error MCP251863::configureRxFifo(uint8_t fifoNum, uint8_t fltNum, uint16_t canSID) {
+Error MCP251863::configureRxFifo(uint8_t fifoNum, uint8_t fltNum, uint16_t canSID,
+                                 uint16_t sidMask) {
     FifoInterruptFlag rxFlags[] = {FIFO_INT_MCP_NFNE, FIFO_INT_MCP_OVFL};
     MCP_TRY(initGeneralPurposeFifo(fifoNum, FifoMode::FIFO_MODE_MCP_RX, lastConfig.rxPayloadSize,
                                    lastConfig.rxFifoDepth,
                                    0,                                 // prioNum : don't care for RX
                                    TxRetransmitMode::TXRET_MCP_NONE,  // don't care
                                    rxFlags, 2));
-    MCP_TRY(initFilter(fltNum, fifoNum, canSID));
+    MCP_TRY(initFilter(fltNum, fifoNum, canSID, sidMask));
     fifoInfo[fifoNum].configured = true;
     fifoInfo[fifoNum].isTx       = false;
     fifoInfo[fifoNum].rxFltNum   = fltNum;
@@ -879,11 +883,11 @@ Error MCP251863::initTransmitQueue(FifoPayloadSize plSize, uint8_t fSize, uint8_
     return writeAddr(addr, buff, 4);
 }
 
-Error MCP251863::initFilter(uint8_t fltNum, uint8_t fifoNum, uint16_t canSID) {
+Error MCP251863::initFilter(uint8_t fltNum, uint8_t fifoNum, uint16_t canSID, uint16_t sidMask) {
     if (fltNum > 31) {
         return Error::InvalidFilterNum;
     }
-    if (canSID > 0x7FF) {
+    if (canSID > 0x7FF || sidMask > 0x7FF) {
         return Error::IdOutOfRange;
     }
 
@@ -904,11 +908,11 @@ Error MCP251863::initFilter(uint8_t fltNum, uint8_t fifoNum, uint16_t canSID) {
     buff[3] = 0x00;
     MCP_TRY(writeAddr(flt_obj_addr, buff, 4));
 
-    // Set mask (so only the correct ID is accepted)
-    buff[0] = 0xFF;        // MSID<7:0>
-    buff[1] = 0x07;        // MSID<10:8>
-    buff[2] = 0x00;        // MEID = don't care
-    buff[3] = 0b01000000;  // MIDE = 1; MSID11 = 0 (don't care)
+    // Set mask (only the masked ID bits must match)
+    buff[0] = sidMask & 0xFF;         // MSID<7:0>
+    buff[1] = (sidMask >> 8) & 0x07;  // MSID<10:8>
+    buff[2] = 0x00;                   // MEID = don't care
+    buff[3] = 0b01000000;             // MIDE = 1; MSID11 = 0 (don't care)
     MCP_TRY(writeAddr(flt_mask_addr, buff, 4));
 
     // Re-enable
@@ -1072,6 +1076,13 @@ Result<FifoStatus> MCP251863::getFIFOStatus(uint8_t fifoNum) {
     status.not_full_or_not_empty   = (reg & 1UL) != 0;
 
     return status;
+}
+
+Error MCP251863::clearRxOverflow(uint8_t fifoNum) {
+    MCP_TRY(checkFifo(fifoNum, false));
+    // writing zero clears RXOVIF, the read-only flags in this byte ignore the write
+    const uint8_t zero = 0;
+    return writeAddr(to_underlying(RegisterAddress::REG_MCP_C1FIFOSTAx) + 12 * fifoNum, &zero, 1);
 }
 
 Result<Status> MCP251863::getStatus() {

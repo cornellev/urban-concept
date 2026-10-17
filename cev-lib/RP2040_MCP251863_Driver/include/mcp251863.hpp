@@ -20,6 +20,8 @@ const uint MCP251863_BAUD_RATE = 16000000;
 const uint MAX_TRANSFER        = 80;  // 2 cmd + 8 header + 4 opt. rx timestamp + 64 payload + 2 crc
 const uint MCP251863_MAX_PAYLOAD = 64;
 
+const uint MCP251863_CLOCK_HZ = 40000000;
+
 enum class Error : uint8_t {
     None = 0x00,
 
@@ -404,8 +406,8 @@ struct DriverStats {
 // Bit time = (BRP+1) * (TSEG1+TSEG2+3) / Fsys
 //   500 K: (0+1)*(62+15+3)/40e6 = 80/40e6  = 2 us  → 500 Kbit/s, sample point ~79%
 //     2 M: (0+1)*(14+ 3+3)/40e6 = 20/40e6  = 500 ns → 2 Mbit/s,  sample point ~75%
-static const BitTiming kBitTiming500K40MHz = {0, 62, 15, 15};
-static const BitTiming kBitTiming2M40MHz   = {0, 14, 3, 3};
+inline constexpr BitTiming kBitTiming500K40MHz = {0, 62, 15, 15};
+inline constexpr BitTiming kBitTiming2M40MHz   = {0, 14, 3, 3};
 
 // Main class
 class MCP251863 {
@@ -494,7 +496,7 @@ class MCP251863 {
                             size_t intFlagSize);
 
     // route one standard-ID filter to a FIFO and enable it
-    Error initFilter(uint8_t filNum, uint8_t fifoNum, uint16_t canSID);
+    Error initFilter(uint8_t filNum, uint8_t fifoNum, uint16_t canSID, uint16_t sidMask);
 
     Error setControllerMode(ControllerMode mode);
     Error setTransceiverMode(TransceiverMode mode);
@@ -537,7 +539,8 @@ class MCP251863 {
     Error configureTxFifo(uint8_t fifoNum, uint8_t prioNum);
     // priority number range: 0 - 30
     // higher number = higher priority to send msgs onto bus
-    Error configureRxFifo(uint8_t fifoNum, uint8_t fltNum, uint16_t canSID);
+    Error configureRxFifo(uint8_t fifoNum, uint8_t fltNum, uint16_t canSID,
+                          uint16_t sidMask = 0x7FF);
     // suscribes the RX FIFO to an ID
     // if 2 RX FIFOs suscribe to the same ID, the FIFO with
     // the lower fitNum has higher priority (msg would be passed
@@ -594,6 +597,8 @@ class MCP251863 {
 
     // read status flags for one FIFO
     Result<FifoStatus> getFIFOStatus(uint8_t fifoNum);
+
+    Error clearRxOverflow(uint8_t fifoNum);
 
     // read driver stats; counts accumulate over time
     // could be useful for analyzing long-term driver behavior?
