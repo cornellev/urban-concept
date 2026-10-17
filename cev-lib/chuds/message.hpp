@@ -65,17 +65,53 @@ struct Message {
 static_assert(std::endian::native == std::endian::little);
 static_assert(std::numeric_limits<float>::is_iec559);
 
-// requirements to bit_cast a struct body onto the wire
+namespace detail {
+
+// compiles only if T has no padding and no pointer members
+// reading a padding byte, or bit_cast of a pointer, is not allowed at compile time
+template <class T>
+consteval bool has_no_padding_or_pointers() {
+    for (const auto byte : std::bit_cast<std::array<unsigned char, sizeof(T)>>(T{})) {
+        static_cast<void>(byte);
+    }
+    return true;
+}
+
+template <class T>
+concept HasWireBodyMarker = requires { requires T::is_chuds_wire_body; };
+
+// satisfied when has_no_padding_or_pointers<T>() is a constant expression
+template <class T>
+concept NoPaddingOrPointers =
+    requires { typename std::bool_constant<has_no_padding_or_pointers<T>()>; };
+
+}  // namespace detail
+
+// a struct that make_message and body_as can bit_cast onto the wire
+// bool, bit-fields, and enums without a fixed underlying type pass these checks but are unsafe
+template <class T>
+concept WireBody =
+    detail::HasWireBodyMarker<T> && std::is_trivially_copyable_v<T> &&
+    std::is_standard_layout_v<T> && sizeof(T) <= kMaxBody && detail::NoPaddingOrPointers<T>;
+
+namespace detail {
+
+// one message per WireBody rule, then WireBody itself so a rule missing here still fails
 template <class T>
 constexpr void check_wire_body() {
-    static_assert(
-        requires { requires T::chuds_wire_body; },
-        "wire body must opt in with `static constexpr bool chuds_wire_body = true;` "
-        "after confirming it has no padding and no pointer members");
+    static_assert(HasWireBodyMarker<T>,
+                  "wire body must opt in with `static constexpr bool is_chuds_wire_body = true;` "
+                  "after checking it has no bool, bit-field, or enum without a fixed underlying "
+                  "type (chuds/docs/serialization.md)");
     static_assert(std::is_trivially_copyable_v<T>, "body must be trivially copyable");
     static_assert(std::is_standard_layout_v<T>, "body must be standard-layout");
     static_assert(sizeof(T) <= kMaxBody, "body is larger than the CAN-FD payload");
+    static_assert(NoPaddingOrPointers<T>,
+                  "body must have no padding or pointers, and a constexpr default constructor");
+    static_assert(WireBody<T>);
 }
+
+}  // namespace detail
 
 // build a message whose body is a trivially-copyable struct
 // the struct's bytes are the wire body, little-endian
@@ -84,7 +120,7 @@ template <class T>
 [[nodiscard]] constexpr std::optional<Message> make_message(MsgClass cls, std::uint8_t sub,
                                                             MsgType type, const T& value) {
     // ensure the struct can be sent over wire
-    check_wire_body<T>();
+    detail::check_wire_body<T>();
 
     if (!is_valid(cls) || !is_valid(type)) {
         return std::nullopt;
@@ -104,7 +140,7 @@ template <class T>
 template <class T>
 [[nodiscard]] constexpr std::optional<T> body_as(const Message& m) {
     // ensure the struct can be sent over wire
-    check_wire_body<T>();
+    detail::check_wire_body<T>();
 
     if (m.body_len != sizeof(T)) {
         return std::nullopt;
