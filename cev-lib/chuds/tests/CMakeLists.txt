@@ -28,6 +28,24 @@ endif()
 include(${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake)
 doctest_discover_tests(chuds-tests)
 
+# a rejected wire body is a compile error, so each case builds compile_fail.cpp
+# a case passes only if the build fails with the opt-in error, not some unrelated one
+foreach(case make_message body_as)
+    string(TOUPPER "BAD_${case}" define)
+    add_library(chuds-compile-${case} OBJECT EXCLUDE_FROM_ALL compile_fail.cpp)
+    target_link_libraries(chuds-compile-${case} PRIVATE chuds)
+    target_compile_definitions(chuds-compile-${case} PRIVATE ${define})
+    # clang-tidy can't parse a build that is meant to fail
+    set_target_properties(chuds-compile-${case} PROPERTIES EXPORT_COMPILE_COMMANDS OFF)
+    set(test "wire body compile check: ${case}")
+    add_test(NAME ${test}
+             COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target chuds-compile-${case})
+    # concurrent builds of one build tree corrupt ninja's state
+    set_tests_properties(${test} PROPERTIES
+        PASS_REGULAR_EXPRESSION "wire body must opt in"
+        RESOURCE_LOCK build-tree)
+endforeach()
+
 # the socketcan adapter is Linux-only
 # test needs a CAN interface (skips without one)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")

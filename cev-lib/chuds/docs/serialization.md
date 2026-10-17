@@ -6,32 +6,31 @@ wire format. That is fast and simple, but it means not every struct is safe to s
 
 ## Requirements
 
-`make_message<T>` / `body_as<T>` accept a body only if all of these hold:
+`make_message<T>` / `body_as<T>` accept a body only if all of these hold. The `WireBody` concept
+in `message.hpp` checks them.
 
-1. Opt-in marker: the struct declares `static constexpr bool chuds_wire_body = true;`.
+1. Opt-in marker: the struct declares `static constexpr bool is_chuds_wire_body = true;`.
 2. Trivially copyable and standard-layout.
 3. `sizeof(T) <= 62` (fits the CAN-FD payload after the 2-byte header).
+4. No padding and no pointer members. Padding bytes are indeterminate and would leak onto the bus.
+   The check builds the body at compile time, so it needs a constexpr `T{}`, which `{}` member
+   initializers give.
 
 Plus two invariants every body must uphold, each backed by an assert:
 
-- No padding. Each body carries `static_assert(sizeof(T) == <sum of field bytes>)`. If the
-  compiler inserts padding, `sizeof` exceeds the total and it fails to compile. Padding bytes are
-  indeterminate and would leak onto the bus.
+- Fixed wire size. Each body carries `static_assert(sizeof(T) == <sum of field bytes>)`, so a
+  change to a body's size fails to compile until the expected size is edited too.
 - Little-endian host with IEEE 754 floats, asserted once in `message.hpp`
   (`std::endian::native == std::endian::little`, `std::numeric_limits<float>::is_iec559`).
 
 ## Why the marker
 
-The compiler cannot check "safe to serialize" generically. There is no standard trait for "no
-padding" or "no pointer members" without C++26 static reflection, which the firmware toolchain
-(arm-none-eabi-gcc) does not have. `std::has_unique_object_representations` is close but rejects
-floats (the joulemeter sends four), so it is unusable here.
+The compiler can check padding and pointers (requirement 4), but not "meant to go on the wire". A
+stray `int` or an unrelated plain struct passes every other check.
 
-So a body declares itself safe to send by opting in. Anything not marked, such as a
-`std::string_view`, a struct with a pointer member, or a stray trivially-copyable type, is
-rejected at compile time.
-The author owns the parts the compiler cannot see: no pointers, no padding (the `sizeof` assert
-proves this), fixed-width fields.
+So a body declares itself safe to send by opting in. Anything not marked, such as a stray
+trivially-copyable type, is rejected at compile time.
+The author owns the parts the compiler cannot see: fixed-width fields and no `bool`.
 
 ## What is not checked
 
@@ -51,14 +50,8 @@ themselves.
 ## Adding a body
 
 1. Use only fixed-width integers (`std::uint16_t`, ...), IEEE floats, or fixed-underlying-type
-   enums. No pointers, no `std::string`/`std::string_view`/`std::vector`/`std::span`, and no
-   `bool` (see above).
+   enums. No pointers, no `std::string`/`std::string_view`/`std::vector`/`std::span`, no
+   `bool` (see above), and no bit-fields (their bit layout is up to the compiler).
 2. Order fields so there is no padding, then `static_assert(sizeof(T) == N)`.
-3. Add `static constexpr bool chuds_wire_body = true;` inside the struct. It is `static`, so it
+3. Add `static constexpr bool is_chuds_wire_body = true;` inside the struct. It is `static`, so it
    takes up no bytes.
-
-## Future
-
-Once C++26 reflection reaches the arm toolchain, the marker and the per-body `sizeof` assert can
-be replaced by a generic `is_wire_safe<T>()` that walks the members and checks layout directly.
-Until then the marker is the bridge.
