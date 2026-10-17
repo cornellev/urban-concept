@@ -26,9 +26,101 @@ static_assert(!CanReadStop<Message>);
 
 struct WheelSpeed {
     std::uint16_t rpm;
-    static constexpr bool chuds_wire_body = true;
+    static constexpr bool is_chuds_wire_body = true;
 };
 static_assert(sizeof(WheelSpeed) == 2);
+
+enum class Mode : std::uint8_t { Off, On };
+struct Mixed {
+    std::uint32_t a{};
+    std::int16_t b{};
+    Mode mode{};
+    std::uint8_t c{};
+    float d{};
+    static constexpr bool is_chuds_wire_body = true;
+};
+struct Pair {
+    std::uint16_t a{};
+    std::uint16_t b{};
+};
+struct Nested {
+    Pair pair{};
+    std::uint32_t c{};
+    static constexpr bool is_chuds_wire_body = true;
+};
+struct Array {
+    std::array<std::uint16_t, 3> values{};
+    std::uint16_t d{};
+    static constexpr bool is_chuds_wire_body = true;
+};
+
+static_assert(WireBody<WheelSpeed>);
+static_assert(WireBody<Mixed>);
+static_assert(WireBody<Nested>);
+static_assert(WireBody<Array>);
+
+// every body below except Unmarked opts in, so each fails on the rule its name gives
+struct Unmarked {
+    std::uint16_t a{};
+};
+// NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
+struct NotTriviallyCopyable {
+    std::uint16_t a{};
+    static constexpr bool is_chuds_wire_body = true;
+    NotTriviallyCopyable()                   = default;
+    // NOLINTNEXTLINE(modernize-use-equals-default)
+    NotTriviallyCopyable(const NotTriviallyCopyable& other) : a(other.a) {}
+};
+class NotStandardLayout {
+   public:
+    std::uint16_t a{};
+    static constexpr bool is_chuds_wire_body = true;
+
+   private:
+    [[maybe_unused]] std::uint16_t b{};
+};
+struct TooBig {
+    std::array<std::uint8_t, kMaxBody + 1> bytes{};
+    static constexpr bool is_chuds_wire_body = true;
+};
+struct MidPadding {
+    std::uint8_t a{};
+    float b{};
+    static constexpr bool is_chuds_wire_body = true;
+};
+struct TailPadding {
+    float a{};
+    std::uint8_t b{};
+    static constexpr bool is_chuds_wire_body = true;
+};
+struct NestedPadding {
+    MidPadding inner{};
+    std::uint32_t c{};
+    static constexpr bool is_chuds_wire_body = true;
+};
+struct ArrayOfPadding {
+    std::array<MidPadding, 2> values{};
+    static constexpr bool is_chuds_wire_body = true;
+};
+struct Pointer {
+    const char* text{};
+    static constexpr bool is_chuds_wire_body = true;
+};
+struct NestedPointer {
+    Pointer inner{};
+    static constexpr bool is_chuds_wire_body = true;
+};
+
+static_assert(!WireBody<Unmarked>);
+static_assert(!WireBody<NotTriviallyCopyable>);
+static_assert(!WireBody<NotStandardLayout>);
+static_assert(!WireBody<TooBig>);
+static_assert(!WireBody<MidPadding>);
+static_assert(!WireBody<TailPadding>);
+static_assert(!WireBody<NestedPadding>);
+static_assert(!WireBody<ArrayOfPadding>);
+static_assert(!WireBody<Pointer>);
+static_assert(!WireBody<NestedPointer>);
 }  // namespace
 
 // encode and decode run at compile time (constexpr)
