@@ -28,7 +28,7 @@ static_assert(sizeof(BodyState) == 1);
 // front_aux, back_aux, joulemeter, and spi2canfd take it, and ignore 0
 struct StatusBlink {
     std::uint16_t half_period_ms{};
-    static constexpr bool chuds_wire_body = true;
+    static constexpr bool is_chuds_wire_body = true;
 };
 static_assert(sizeof(StatusBlink) == 2);
 
