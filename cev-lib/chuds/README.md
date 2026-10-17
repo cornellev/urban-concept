@@ -39,6 +39,69 @@ The service reads the settings from `frame.hpp`, so the VCU can't drift from the
 data phase. `fd on` enables CAN-FD frames. `restart-ms 100` restarts the controller 100 ms after it
 goes bus-off, instead of leaving it off until someone runs the command again.
 
+If you bring `can0` up by hand, pass the same sample points. The kernel defaults (87.5% and 75%)
+make every frame a board sends with the data rate fail at the Pi, while frames the Pi sends still
+reach the boards:
+
+```sh
+sudo ip link set can0 up type can bitrate 500000 sample-point 0.8 dbitrate 2000000 dsample-point 0.8 fd on restart-ms 100
+```
+
+## Bench setup
+
+### Pi CAN board (RPi_CAN_V0.1)
+
+The board's MCP251863 connects to the Pi's SPI0 through its 10-pin J1:
+
+| J1  | Signal       | Pi 5 header pin   |
+| --- | ------------ | ----------------- |
+| 1   | GND          | 6                 |
+| 2   | STBY         | any GND           |
+| 3-4 | nINT1, nINT0 | not connected     |
+| 5   | nINT         | 22 (GPIO25)       |
+| 6   | +3V3         | not connected     |
+| 7   | nCS          | 24 (GPIO8, CE0)   |
+| 8   | SDO          | 21 (GPIO9, MISO)  |
+| 9   | SDI          | 19 (GPIO10, MOSI) |
+| 10  | SCK          | 23 (GPIO11, SCLK) |
+
+STBY has no pull-down on the board, so a floating STBY leaves the transceiver in standby.
+
+Power it with 12-48 V on J3 pins 1 (GND) and 2 (+48), or with a USB-A to USB-C cable. Its CC pins
+are unconnected, so a USB-C to USB-C cable gives it no power. Use one source, not both: USB and the
+buck output share the board's 5 V rail with no diode. With power applied, J1 pin 6 reads 3.3 V.
+
+The kernel driver probes the board once, when its overlay loads, so power the board first. To load
+it without a reboot:
+
+```sh
+sudo dtoverlay mcp251xfd spi0-0 interrupt=25 oscillator=40000000
+```
+
+To load it at every boot, add `dtoverlay=mcp251xfd,spi0-0,interrupt=25,oscillator=40000000` to
+`/boot/firmware/config.txt`.
+
+### Wiring the bus
+
+- Connect CAN_P to CAN_P and CAN_N to CAN_N by name, never by pin number. RPi_CAN's J3 has pin 3
+  CAN_N and pin 4 CAN_P, and other boards put them the other way round. A swapped node neither
+  hears the bus nor is heard by it.
+- Terminate the bus at exactly its two ends. RPi_CAN's termination (R3/R4, 62 ohm each) is always
+  fitted, so put it at one end. With only one termination, frames fail at the 2 Mbit/s data rate.
+- A dev board's transceiver runs from USB. front_aux's runs from its +12 rail, so it needs 12 V on
+  J3 or 48 V on J5 as well as USB. On USB alone its firmware runs but nothing reaches the bus.
+
+### Troubleshooting
+
+- **`Failed to read Oscillator Configuration Register (osc=0x00000000)`** or `osc=0xffffffff` in
+  `dmesg`: the Pi got no answer over SPI. Check the board's power and the J1 cable. If the board
+  was powered after the Pi probed it, retry with
+  `echo spi0.0 | sudo tee /sys/bus/spi/drivers/mcp251xfd/bind`.
+- **A flood of `CRC read error` in `dmesg`**: the board lost power while `can0` was up. Run
+  `sudo ip link set can0 down`, restore power, unbind and bind as above, then bring `can0` up.
+- **Error counters at `tx 128 rx 0`**: the node sent and nobody acknowledged. The other nodes are
+  not connected, swapped, or unpowered.
+
 ## Usage
 
 Include `chuds/chuds.hpp` plus the transport for your platform, then do everything through a
@@ -126,3 +189,21 @@ Turn lamps light only while the `kBlinkPhase` bit is set. The VCU toggles it, so
 in phase. A node that hears no `BodyState` for 1 s falls back to safe states: horn off, wiper
 parked, turn signals off, headlights held. A STOP applies the same safe states and latches until
 reset.
+
+front_aux, back_aux, and joulemeter also take a `StatusBlink` `Update` on `0x1NN`, their own
+subaddress, that sets their status LED's blink half-period in ms. They ignore 0, and the period
+returns to the firmware default on reset. Dev boards running `elec/src/spi2canfd` take it too, on
+the shared subaddress `0x40`, so one command reaches every one of them.
+
+For bench testing on Linux, `chudsctl` (`build/tools/chudsctl`) sends and prints messages by name.
+The interface defaults to `can0`, and `-i` picks another:
+
+```sh
+./build/tools/chudsctl dump                   # print every message, decoded
+./build/tools/chudsctl body headlights left   # hold a BodyState until ctrl-c
+./build/tools/chudsctl blink all 100          # every node's status LED half-period, in ms
+./build/tools/chudsctl stop                   # STOP, latches until boards reset
+```
+
+`body` takes any of `headlights left right hazards horn wiper`. `blink` takes `front_aux`,
+`back_aux`, `joulemeter`, `spi2canfd`, or `all`.

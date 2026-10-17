@@ -6,6 +6,7 @@
 #include "chuds/mcp_transport.hpp"
 #include "common/can_health.hpp"
 #include "common/interval.hpp"
+#include "common/status_blink.hpp"
 #include "config.hpp"
 #include "pico/stdlib.h"
 
@@ -97,6 +98,9 @@ int main() {
                 std::printf("%02X", static_cast<unsigned>(rx->data[j]));
             }
             std::printf("\n");
+            if (const auto m = chuds::decode(*rx)) {
+                cev::apply_status_blink(*m, chuds::spi2canfd::kNodeId, blink);
+            }
         }
 
         for (int c = getchar_timeout_us(0); c != PICO_ERROR_TIMEOUT; c = getchar_timeout_us(0)) {

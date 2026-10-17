@@ -1,0 +1,22 @@
+#pragma once
+
+#include <cstdint>
+
+#include "chuds/chuds.hpp"
+#include "common/interval.hpp"
+
+namespace cev {
+
+// if m is a StatusBlink sent to node, set blink's period from it
+// call it on every received message
+inline void apply_status_blink(const chuds::Message& m, std::uint8_t node, Interval& blink) {
+    if (m.cls != chuds::MsgClass::Command || m.subaddress != node ||
+        m.type != chuds::MsgType::Update) {
+        return;
+    }
+    if (const auto b = chuds::body_as<chuds::StatusBlink>(m); b && b->half_period_ms != 0) {
+        blink.period_ms = b->half_period_ms;
+    }
+}
+
+}  // namespace cev

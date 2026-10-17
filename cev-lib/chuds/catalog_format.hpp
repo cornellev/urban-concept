@@ -28,6 +28,15 @@ inline int format_message(const Message& m, std::span<char> out) {
                                  f->rpm_left, f->rpm_right, f->steering);
         }
     }
+    const bool blink_node =
+        m.subaddress == front_aux::kNodeId || m.subaddress == back_aux::kNodeId ||
+        m.subaddress == joulemeter::kNodeId || m.subaddress == spi2canfd::kNodeId;
+    if (m.cls == MsgClass::Command && blink_node && m.type == MsgType::Update) {
+        if (const auto b = body_as<StatusBlink>(m)) {
+            return std::snprintf(out.data(), out.size(), "status blink %d ms to 0x%02x",
+                                 b->half_period_ms, m.subaddress);
+        }
+    }
     if (m.cls == MsgClass::Telemetry && m.subaddress == back_aux::kNodeId) {
         if (const auto b = body_as<back_aux::Telemetry>(m)) {
             return std::snprintf(out.data(), out.size(), "back_aux rpm %d/%d brake %d", b->rpm_left,
