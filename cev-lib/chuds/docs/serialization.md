@@ -13,8 +13,9 @@ in `message.hpp` checks them.
 2. Trivially copyable and standard-layout.
 3. `sizeof(T) <= 62` (fits the CAN-FD payload after the 2-byte header).
 4. No padding and no pointer members. Padding bytes are indeterminate and would leak onto the bus.
-   The check builds the body at compile time, so it needs a constexpr `T{}`, which `{}` member
-   initializers give.
+   The check builds `T{}` at compile time, so the body must have a constexpr default constructor.
+   A plain struct of numbers always has one. A user-written constructor that is not `constexpr`
+   does not count.
 
 Plus two invariants every body must uphold, each backed by an assert:
 

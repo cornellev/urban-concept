@@ -107,7 +107,7 @@ constexpr void check_wire_body() {
     static_assert(std::is_standard_layout_v<T>, "body must be standard-layout");
     static_assert(sizeof(T) <= kMaxBody, "body is larger than the CAN-FD payload");
     static_assert(NoPaddingOrPointers<T>,
-                  "body must have no padding or pointer members, and a constexpr T{}");
+                  "body must have no padding or pointers, and a constexpr default constructor");
     static_assert(WireBody<T>);
 }
 
