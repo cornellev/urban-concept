@@ -504,8 +504,12 @@ void MCP251863::spiTransferDMA(size_t len) {
     instance_ = this;
 
     // abort possible unfinished transactions
+    // rp2040-e13: an abort can raise a spurious completion irq, so mask and clear it
+    dma_channel_set_irq0_enabled(dma_rx_chan, false);
     dma_channel_abort(dma_tx_chan);
     dma_channel_abort(dma_rx_chan);
+    dma_channel_acknowledge_irq0(dma_rx_chan);
+    dma_channel_set_irq0_enabled(dma_rx_chan, true);
 
     // clear overrun and drain RX FIFO
     spi_get_hw(spi_)->icr = SPI_SSPICR_RORIC_BITS;
@@ -975,13 +979,15 @@ Error MCP251863::start_push_frame(uint8_t fifoNum, const CanFdFrame& frame) {
 }
 
 Error MCP251863::poll_push() {
-    if (fifo_op_state == FifoOperationState::PUSH_DONE) {
+    // read once so the dma irq can't change it between the two checks
+    const FifoOperationState state = fifo_op_state;
+    if (state == FifoOperationState::PUSH_DONE) {
         if (pending_fifo_uinc) {
             MCP_TRY(serviceFifoUinc());
         }
         return Error::None;
     }
-    if (fifo_op_state == FifoOperationState::PUSHING) {
+    if (state == FifoOperationState::PUSHING) {
         return Error::Busy;
     }
     return Error::NoOperationPending;
@@ -1041,13 +1047,15 @@ Error MCP251863::start_pop_canfd(uint8_t fifoNum) {
 }
 
 Error MCP251863::poll_pop() {
-    if (fifo_op_state == FifoOperationState::POP_DONE) {
+    // read once so the dma irq can't change it between the two checks
+    const FifoOperationState state = fifo_op_state;
+    if (state == FifoOperationState::POP_DONE) {
         if (pending_fifo_uinc) {
             MCP_TRY(serviceFifoUinc());
         }
         return Error::None;
     }
-    if (fifo_op_state == FifoOperationState::POPPING) {
+    if (state == FifoOperationState::POPPING) {
         return Error::Busy;
     }
     return Error::NoOperationPending;
