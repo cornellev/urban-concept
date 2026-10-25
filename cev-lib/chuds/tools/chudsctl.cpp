@@ -35,7 +35,7 @@ void usage(const char* prog) {
                  "  body [outputs...]    hold a body state until ctrl-c\n"
                  "                       outputs: headlights left right hazards horn wiper\n"
                  "  blink NODE MS        set a node's status LED blink half-period\n"
-                 "                       nodes: front_aux back_aux joulemeter spi2canfd all\n"
+                 "                       nodes: front_aux back_aux joulemeter devboard all\n"
                  "  stop [SEVERITY]      send a STOP, 0 (default) is the most severe\n"
                  "                       boards latch it until they reset\n"
                  "\n"
@@ -133,7 +133,7 @@ int run_body(Bus& bus, int argc, char** argv, int first) {
 
 int run_blink(Bus& bus, std::string_view node_name, std::string_view arg) {
     constexpr std::array kAllNodes = {chuds::front_aux::kNodeId, chuds::back_aux::kNodeId,
-                                      chuds::joulemeter::kNodeId, chuds::spi2canfd::kNodeId};
+                                      chuds::joulemeter::kNodeId, chuds::devboard::kNodeId};
     std::vector<std::uint8_t> nodes;
     if (node_name == "front_aux") {
         nodes = {chuds::front_aux::kNodeId};
@@ -141,13 +141,13 @@ int run_blink(Bus& bus, std::string_view node_name, std::string_view arg) {
         nodes = {chuds::back_aux::kNodeId};
     } else if (node_name == "joulemeter") {
         nodes = {chuds::joulemeter::kNodeId};
-    } else if (node_name == "spi2canfd") {
-        nodes = {chuds::spi2canfd::kNodeId};
+    } else if (node_name == "devboard") {
+        nodes = {chuds::devboard::kNodeId};
     } else if (node_name == "all") {
         nodes.assign(kAllNodes.begin(), kAllNodes.end());
     } else {
         std::fprintf(stderr,
-                     "blink node must be front_aux, back_aux, joulemeter, spi2canfd, or all\n");
+                     "blink node must be front_aux, back_aux, joulemeter, devboard, or all\n");
         return 2;
     }
     std::uint16_t ms{};

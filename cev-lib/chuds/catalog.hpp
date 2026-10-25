@@ -25,7 +25,7 @@ struct BodyState {
 static_assert(sizeof(BodyState) == 1);
 
 // command body sent to one node, sets its status LED's blink half-period
-// front_aux, back_aux, joulemeter, and spi2canfd take it, and ignore 0
+// front_aux, back_aux, joulemeter, and devboard take it, and ignore 0
 struct StatusBlink {
     std::uint16_t half_period_ms{};
     static constexpr bool is_chuds_wire_body = true;
@@ -83,9 +83,9 @@ static_assert(sizeof(Telemetry) == 16);
 
 }  // namespace chuds::joulemeter
 
-namespace chuds::spi2canfd {
+namespace chuds::devboard {
 
 // this node's id: command target, shared by every dev board running the bridge
 constexpr std::uint8_t kNodeId = 0x40;
 
-}  // namespace chuds::spi2canfd
+}  // namespace chuds::devboard
