@@ -139,6 +139,65 @@ sudo umount /mnt
 
 With several boards plugged in, pick one by serial number under `/dev/serial/by-id/`.
 
+## Boards
+
+Each folder under `src/` is the firmware for one PCB. Every pin is in its `config.hpp`. What each
+node sends and drives is in [`cev-lib/chuds/README.md`](../cev-lib/chuds/README.md#nodes).
+
+- `devboard`: SPI_2_CANFD dev boards, a USB serial to CAN bridge (see below). Status LEDs on GPIO12
+  and GPIO17.
+- `front_aux`: FAux_V1.1. Status LED on GPIO25.
+- `back_aux`: BAux_V1.1. Status LED on GPIO25.
+- `joulemeter`: Joulemeter_V1.4. Status LED on GPIO25.
+- `template-project`: no PCB, the starting point for a new board.
+
+### CAN connector and power
+
+Every board has one 4-pin CAN connector with GND and +48 on pins 1 and 2. The CAN pair is not in
+the same order on every board, so always connect CAN_P to CAN_P and CAN_N to CAN_N by name.
+
+| Board      | Connector | Pin 3 | Pin 4 | CAN works on USB power alone            |
+| ---------- | --------- | ----- | ----- | --------------------------------------- |
+| dev board  | J2        | CAN_P | CAN_N | yes                                     |
+| front_aux  | J5        | CAN_P | CAN_N | no: also needs 12 V on J3 or 48 V on J5 |
+| back_aux   | J4        | CAN_N | CAN_P | no: needs 48 V on J4                    |
+| joulemeter | J2        | CAN_N | CAN_P | no: needs 48 V on J2                    |
+| RPi_CAN    | J3        | CAN_N | CAN_P | yes, with a USB-A to USB-C cable        |
+
+RPi_CAN's power and Pi wiring are in
+[`cev-lib/chuds/README.md`](../cev-lib/chuds/README.md#pi-can-board-rpi_can_v01).
+
+### Known board faults
+
+- **FAux_V1.1:** 3.3 V comes only from USB, so on 48 V alone the RP2040 is off. Keep USB plugged
+  in, or add a Schottky diode from +5 to VBUS.
+- **BAux_V1.1:** the CAN chip's SPI pins are not wired, so CAN needs bodge wires. The lamp +12 pins
+  sit on a separate `12V` net that reaches no supply. The wiper servo connector J9 carries +12 on
+  pin 3, so feed a 5 V servo from its own supply and leave J9 pin 3 unconnected.
+- **Joulemeter_V1.4:** the CAN chip's 5 V supply never reaches the buck output, so CAN needs a
+  bodge wire from a `Buck_Out` pad (C27.1, C28.1, C29.1, or D6 pad 2) to C4 pad 1. The current
+  scale in `config.hpp` is a placeholder until the shunt value is known.
+
+### devboard firmware
+
+The dev board firmware prints every CAN frame it receives on USB serial as a line in `cansend`
+syntax, such as `123##1AABB`, and sends every such line it reads onto the bus. It replies
+`bad line` to a line it can't parse and `can tx failed` when a send fails, and prints
+`can init failed` every second if the CAN chip didn't start.
+
+To test a dev board from a Pi, with the board on `/dev/ttyACM0` and `can0` up:
+
+```sh
+stty -F /dev/ttyACM0 raw -echo
+cat /dev/ttyACM0                         # one terminal: frames the board hears
+candump can0                             # another: frames the board sends
+printf '123##1DEADBEEF\n' > /dev/ttyACM0 # board to can0
+cansend can0 124##1CAFE                  # can0 to board
+cansend can0 140##100026400              # StatusBlink: every dev board's LEDs at 100 ms
+```
+
+A Pico drops its USB output while no program has the port open, so start `cat` before sending.
+
 ## Adding a new board
 
 Each subdirectory of `src/` is an independent project with its own
