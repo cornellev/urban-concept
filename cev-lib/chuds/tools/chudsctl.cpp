@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -67,9 +68,13 @@ int run_dump(Bus& bus) {
         for (auto r = bus.recv(); r || r.error() != chuds::RxError::Empty; r = bus.recv()) {
             if (r) {
                 chuds::print_message(*r);
-            } else if (chuds::is_fault(r.error())) {
-                std::fprintf(stderr, "recv fault: %d\n", std::to_underlying(r.error()));
+            } else if (r.error() == chuds::RxError::Error) {
+                std::fprintf(stderr, "recv error: %d\n", std::to_underlying(r.error()));
                 return 1;
+            } else if (chuds::is_fault(r.error())) {
+                // overflow and bus-off recover, so report and keep reading
+                std::fprintf(stderr, "recv fault: %d\n", std::to_underlying(r.error()));
+                break;
             }
         }
     }
@@ -171,7 +176,13 @@ int run_stop(Bus& bus, std::string_view arg) {
         std::fprintf(stderr, "stop severity must be 0-255\n");
         return 2;
     }
-    const auto st = bus.send(chuds::make_stop(severity, kSender, "chudsctl"));
+    const auto stop = chuds::make_stop(severity, kSender, "chudsctl");
+    auto st         = bus.send(stop);
+    // a full tx queue drains within milliseconds, so retry for up to a second
+    for (int tries = 0; !st && st.error() == chuds::TxError::QueueFull && tries < 100; ++tries) {
+        std::this_thread::sleep_for(std::chrono::milliseconds{10});
+        st = bus.send(stop);
+    }
     report("stop", st);
     return st ? 0 : 1;
 }

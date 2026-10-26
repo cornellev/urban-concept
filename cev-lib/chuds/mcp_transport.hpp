@@ -121,7 +121,8 @@ class Mcp251863Transport {
         if (!init_ok_) {
             return std::unexpected(RxError::Error);
         }
-        // nINT stays high while no frame or overflow is pending, so skip the spi reads
+        // nINT high means no enabled interrupt is pending, so skip the spi reads
+        // the driver also enables tx and error interrupts, so nINT is usually low anyway
         if (gpio_get(nint_)) {
             return std::unexpected(RxError::Empty);
         }

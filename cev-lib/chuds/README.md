@@ -71,6 +71,9 @@ Power it with 12-48 V on J3 pins 1 (GND) and 2 (+48), or with a USB-A to USB-C c
 are unconnected, so a USB-C to USB-C cable gives it no power. Use one source, not both: USB and the
 buck output share the board's 5 V rail with no diode. With power applied, J1 pin 6 reads 3.3 V.
 
+A Pi's USB ports share one current limit, so RPi_CAN and several boards on the same Pi may knock a
+board off USB. If that happens, power RPi_CAN from J3 or a separate USB charger.
+
 The kernel driver probes the board once, when its overlay loads, so power the board first. To load
 it without a reboot:
 
@@ -88,8 +91,13 @@ To load it at every boot, add `dtoverlay=mcp251xfd,spi0-0,interrupt=25,oscillato
   hears the bus nor is heard by it.
 - Terminate the bus at exactly its two ends. RPi_CAN's termination (R3/R4, 62 ohm each) is always
   fitted, so put it at one end. With only one termination, frames fail at the 2 Mbit/s data rate.
-- A dev board's transceiver runs from USB. front_aux's runs from its +12 rail, so it needs 12 V on
-  J3 or 48 V on J5 as well as USB. On USB alone its firmware runs but nothing reaches the bus.
+  Every other board's design fits the same termination, but check the board itself, since one dev
+  board was built without it. Put one terminated board at the other end, and any board without
+  termination in the middle.
+- Plugging CAN wires into a live bus can cause one brief error-warning or error-passive state. It
+  clears on its own.
+- Which boards reach the bus on USB power alone is in the boards table in
+  [`elec/README.md`](../../elec/README.md#boards).
 
 ### Troubleshooting
 
@@ -100,7 +108,12 @@ To load it at every boot, add `dtoverlay=mcp251xfd,spi0-0,interrupt=25,oscillato
 - **A flood of `CRC read error` in `dmesg`**: the board lost power while `can0` was up. Run
   `sudo ip link set can0 down`, restore power, unbind and bind as above, then bring `can0` up.
 - **Error counters at `tx 128 rx 0`**: the node sent and nobody acknowledged. The other nodes are
-  not connected, swapped, or unpowered.
+  not connected, swapped, or unpowered. When both ends show it, CAN_P and CAN_N are swapped at one
+  of them.
+- **`can0` goes bus-off as soon as a board joins**: most likely the bus has only one termination.
+  Check that the far end board has its resistors.
+- **Frames from boards fail at the Pi but frames from the Pi reach the boards**: `can0` was brought
+  up with the kernel's default sample points. See [Bus settings](#bus-settings).
 
 ## Usage
 
@@ -192,7 +205,7 @@ reset.
 
 front_aux, back_aux, and joulemeter also take a `StatusBlink` `Update` on `0x1NN`, their own
 subaddress, that sets their status LED's blink half-period in ms. They ignore 0, and the period
-returns to the firmware default on reset. Dev boards running `elec/src/spi2canfd` take it too, on
+returns to the firmware default on reset. Dev boards running `elec/src/devboard` take it too, on
 the shared subaddress `0x40`, so one command reaches every one of them.
 
 For bench testing on Linux, `chudsctl` (`build/tools/chudsctl`) sends and prints messages by name.
@@ -206,4 +219,4 @@ The interface defaults to `can0`, and `-i` picks another:
 ```
 
 `body` takes any of `headlights left right hazards horn wiper`. `blink` takes `front_aux`,
-`back_aux`, `joulemeter`, `spi2canfd`, or `all`.
+`back_aux`, `joulemeter`, `devboard`, or `all`.
