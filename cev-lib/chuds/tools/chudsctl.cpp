@@ -125,9 +125,9 @@ int run_body(Bus& bus, int argc, char** argv, int first) {
     while (g_stop == 0) {
         const auto now = Clock::now();
         if (now >= next_blink) {
-            blink_on = !blink_on;
-            next_blink += kBlinkHalf;
-            next_send = now;
+            blink_on   = !blink_on;
+            next_blink = now + kBlinkHalf;
+            next_send  = now;
         }
         if (now >= next_send) {
             const auto out =
