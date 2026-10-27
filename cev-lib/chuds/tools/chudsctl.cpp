@@ -1,13 +1,14 @@
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <cstdio>
+#include <span>
 #include <string_view>
 #include <thread>
 #include <utility>
-#include <vector>
 
 #include "chuds/chuds.hpp"
 #include "chuds/socketcan_transport.hpp"
@@ -22,6 +23,29 @@ constexpr auto kBodyResend = std::chrono::milliseconds{300};
 constexpr auto kBlinkHalf = std::chrono::milliseconds{333};
 // the vcu has no node id in the catalog, so its stops carry sender 0
 constexpr std::uint8_t kSender = 0x00;
+
+struct NamedValue {
+    std::string_view name;
+    std::uint8_t value;
+};
+
+// body output bits by command-line name
+constexpr std::array<NamedValue, 6> kOutputs = {{
+    {"headlights", chuds::BodyState::kHeadlights},
+    {"left", chuds::BodyState::kLeftTurn},
+    {"right", chuds::BodyState::kRightTurn},
+    {"hazards", chuds::BodyState::kLeftTurn | chuds::BodyState::kRightTurn},
+    {"horn", chuds::BodyState::kHorn},
+    {"wiper", chuds::BodyState::kWiper},
+}};
+
+// node ids by command-line name
+constexpr std::array<NamedValue, 4> kNodes = {{
+    {"front_aux", chuds::front_aux::kNodeId},
+    {"back_aux", chuds::back_aux::kNodeId},
+    {"joulemeter", chuds::joulemeter::kNodeId},
+    {"devboard", chuds::devboard::kNodeId},
+}};
 
 volatile std::sig_atomic_t g_stop = 0;
 
@@ -85,23 +109,12 @@ int run_body(Bus& bus, int argc, char** argv, int first) {
     using chuds::BodyState;
     std::uint8_t bits{};
     for (int i = first; i < argc; ++i) {
-        const std::string_view name = argv[i];
-        if (name == "headlights") {
-            bits |= BodyState::kHeadlights;
-        } else if (name == "left") {
-            bits |= BodyState::kLeftTurn;
-        } else if (name == "right") {
-            bits |= BodyState::kRightTurn;
-        } else if (name == "hazards") {
-            bits |= BodyState::kLeftTurn | BodyState::kRightTurn;
-        } else if (name == "horn") {
-            bits |= BodyState::kHorn;
-        } else if (name == "wiper") {
-            bits |= BodyState::kWiper;
-        } else {
+        const auto it = std::ranges::find(kOutputs, std::string_view{argv[i]}, &NamedValue::name);
+        if (it == kOutputs.end()) {
             std::fprintf(stderr, "unknown output: %s\n", argv[i]);
             return 2;
         }
+        bits |= it->value;
     }
 
     std::printf("holding body state 0x%02x, ctrl-c to release\n", bits);
@@ -137,23 +150,15 @@ int run_body(Bus& bus, int argc, char** argv, int first) {
 }
 
 int run_blink(Bus& bus, std::string_view node_name, std::string_view arg) {
-    constexpr std::array kAllNodes = {chuds::front_aux::kNodeId, chuds::back_aux::kNodeId,
-                                      chuds::joulemeter::kNodeId, chuds::devboard::kNodeId};
-    std::vector<std::uint8_t> nodes;
-    if (node_name == "front_aux") {
-        nodes = {chuds::front_aux::kNodeId};
-    } else if (node_name == "back_aux") {
-        nodes = {chuds::back_aux::kNodeId};
-    } else if (node_name == "joulemeter") {
-        nodes = {chuds::joulemeter::kNodeId};
-    } else if (node_name == "devboard") {
-        nodes = {chuds::devboard::kNodeId};
-    } else if (node_name == "all") {
-        nodes.assign(kAllNodes.begin(), kAllNodes.end());
-    } else {
-        std::fprintf(stderr,
-                     "blink node must be front_aux, back_aux, joulemeter, devboard, or all\n");
-        return 2;
+    std::span<const NamedValue> nodes = kNodes;
+    if (node_name != "all") {
+        const auto it = std::ranges::find(kNodes, node_name, &NamedValue::name);
+        if (it == kNodes.end()) {
+            std::fprintf(stderr,
+                         "blink node must be front_aux, back_aux, joulemeter, devboard, or all\n");
+            return 2;
+        }
+        nodes = {it, 1};
     }
     std::uint16_t ms{};
     if (!parse(arg, ms) || ms == 0) {
@@ -161,8 +166,8 @@ int run_blink(Bus& bus, std::string_view node_name, std::string_view arg) {
         return 2;
     }
     bool ok = true;
-    for (const std::uint8_t node : nodes) {
-        const auto st = bus.send(chuds::MsgClass::Command, node, chuds::MsgType::Update,
+    for (const NamedValue& node : nodes) {
+        const auto st = bus.send(chuds::MsgClass::Command, node.value, chuds::MsgType::Update,
                                  chuds::StatusBlink{ms});
         report("status blink", st);
         ok = ok && st;
