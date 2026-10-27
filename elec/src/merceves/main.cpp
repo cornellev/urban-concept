@@ -7,6 +7,8 @@
 #include "hardware/pwm.h"
 #include "pico/stdlib.h"
 
+#include "steering_motion.hpp"
+
 // ---- pin map ----
 
 struct DrivetrainMotor {
@@ -31,34 +33,73 @@ constexpr SteeringMotor steering = {.pulse = 14, .dir = 15, .enable = 16};
 constexpr uint ONBOARD_LED_PIN = 25;
 
 constexpr float DRIVETRAIN_PWM_FREQ_HZ = 2'000.0f;
-constexpr float STEPPER_MAX_FREQ_HZ = 10'000.0f;
-constexpr float STEPPER_MIN_FREQ_HZ = 250.0f;
-constexpr float SPEED_DEADBAND = 0.01f;  // stepper speeds below this count as stopped
+constexpr float STEPPER_MAX_FREQ_HZ = 17'500.0f;
+constexpr int32_t STEERING_HALF_RANGE_STEPS = 2'000;  // +/-90 degrees at 8,000 pulses/rev
+constexpr float STEPPER_ACCELERATION = 40'000.0f;  // steps/s^2; applies to acceleration and braking
+constexpr uint STEPPER_PULSE_US = 3;  // DM542T: pulse high and low must each last at least 2.5 us
 constexpr uint STEPPER_DIR_SETUP_US = 5;     // DM542T: dir must lead the pulse edge by at least 5 us
 constexpr uint STEPPER_ENABLE_SETUP_US = 5;  // DM542T: enable must lead dir by at least 5 us
 
-// drivetrain: fixed frequency, so wrap is set by it. steering: wrap is set so clkdiv = 1 gives the max step rate
+static_assert(STEERING_HALF_RANGE_STEPS > 0);
+static_assert(STEPPER_ACCELERATION > 0.0f);
+static_assert(STEPPER_MAX_FREQ_HZ > 0.0f);
+static_assert(STEPPER_MAX_FREQ_HZ * (2 * STEPPER_PULSE_US) < 1'000'000.0f);
+
 constexpr uint32_t DRIVETRAIN_WRAP = SYS_CLK_HZ / DRIVETRAIN_PWM_FREQ_HZ - 1;
-constexpr uint32_t STEERING_WRAP = SYS_CLK_HZ / STEPPER_MAX_FREQ_HZ - 1;
 static_assert(DRIVETRAIN_WRAP <= UINT16_MAX, "drivetrain PWM frequency too low for clkdiv = 1");
-static_assert(STEERING_WRAP <= UINT16_MAX, "stepper max frequency too low for clkdiv = 1");
 
-// pulse is fixed 50% duty, variable frequency (set by clkdiv alone). starts disabled, dir low, stopped
+static SteeringMotion steering_motion(STEERING_HALF_RANGE_STEPS, STEPPER_MAX_FREQ_HZ, STEPPER_ACCELERATION);
+static SteeringMotion::Step pending_step;
+static uint64_t next_step_us = 0;
+
+// Count GPIO pulse edges directly so the position tracks pulses actually sent to the driver.
 static void init_motor(const SteeringMotor& motor) {
-    gpio_init(motor.enable);
-    gpio_put(motor.enable, 0);
-    gpio_set_dir(motor.enable, GPIO_OUT);
+    for (uint pin : {motor.enable, motor.dir, motor.pulse}) {
+        gpio_init(pin);
+        gpio_put(pin, 0);
+        gpio_set_dir(pin, GPIO_OUT);
+    }
+}
 
-    gpio_init(motor.dir);
-    gpio_put(motor.dir, 0);
-    gpio_set_dir(motor.dir, GPIO_OUT);
+static void stop_steering() {
+    pending_step = {};
+    steering_motion.stop();
+    gpio_put(steering.pulse, 0);
+    gpio_put(steering.enable, 0);
+}
 
-    uint slice = pwm_gpio_to_slice_num(motor.pulse);
-    pwm_config cfg = pwm_get_default_config();
-    pwm_config_set_wrap(&cfg, STEERING_WRAP);
-    pwm_init(slice, &cfg, false);
-    pwm_set_gpio_level(motor.pulse, (STEERING_WRAP + 1) / 2);
-    gpio_set_function(motor.pulse, GPIO_FUNC_PWM);
+// Called continuously, independently of serial command arrival. Late pulses are never
+// caught up in a burst: serial/interrupt delays can only make the motion slower.
+static void update_steering() {
+    uint64_t last_edge_us = 0;
+    if (pending_step.direction != 0 && time_us_64() >= next_step_us) {
+        last_edge_us = time_us_64();
+        gpio_put(steering.pulse, 1);
+        steering_motion.step_taken(pending_step);
+        sleep_us(STEPPER_PULSE_US);
+        gpio_put(steering.pulse, 0);
+        pending_step = {};
+    }
+    if (pending_step.direction != 0) {
+        return;
+    }
+    pending_step = steering_motion.next_step();
+    if (pending_step.direction == 0) {
+        return;  // Keep the driver enabled to hold the requested position.
+    }
+    if (!gpio_get_out_level(steering.enable)) {
+        gpio_put(steering.enable, 1);
+        sleep_us(STEPPER_ENABLE_SETUP_US);
+    }
+    const bool reverse = pending_step.direction < 0;
+    if (gpio_get_out_level(steering.dir) != reverse) {
+        gpio_put(steering.dir, reverse);
+        sleep_us(STEPPER_DIR_SETUP_US);
+    }
+    const uint64_t now = time_us_64();
+    next_step_us = std::max(last_edge_us != 0 ? last_edge_us + pending_step.interval_us
+                                            : now + pending_step.interval_us,
+                            now + STEPPER_PULSE_US);
 }
 
 // pwm is fixed frequency, variable duty. starts forward at 0% duty
@@ -72,46 +113,13 @@ static void init_motor(const DrivetrainMotor& motor) {
     gpio_set_dir(motor.back, GPIO_OUT);
 
     uint slice = pwm_gpio_to_slice_num(motor.pwm);
+    // The shared SDK mapper can return slices beyond this chip's PWM array.
+    hard_assert(slice < NUM_PWM_SLICES);
     pwm_config cfg = pwm_get_default_config();
     pwm_config_set_wrap(&cfg, DRIVETRAIN_WRAP);
     pwm_init(slice, &cfg, false);
     pwm_set_gpio_level(motor.pwm, 0);
     gpio_set_function(motor.pwm, GPIO_FUNC_PWM);
-    pwm_set_enabled(slice, true);
-}
-
-// [-1.0, 1.0]; the sign sets the dir pin, the magnitude maps linearly onto the step rate
-static void set_speed(const SteeringMotor& motor, float speed) {
-    uint slice = pwm_gpio_to_slice_num(motor.pulse);
-    speed = std::clamp(speed, -1.0f, 1.0f);
-    bool reverse = speed < 0.0f;
-    float magnitude = std::fabs(speed);
-
-    // stopped: stop pulsing and disable the driver
-    if (magnitude < SPEED_DEADBAND) {
-        pwm_set_enabled(slice, false);
-        gpio_put(motor.enable, 0);
-        return;
-    }
-
-    // the driver needs enable settled before dir changes
-    if (!gpio_get_out_level(motor.enable)) {
-        gpio_put(motor.enable, 1);
-        sleep_us(STEPPER_ENABLE_SETUP_US);
-    }
-
-    // the driver needs dir steady before the next pulse edge, so pause stepping around a flip
-    if (gpio_get_out_level(motor.dir) != reverse) {
-        pwm_set_enabled(slice, false);
-        gpio_put(motor.dir, reverse);
-        sleep_us(STEPPER_DIR_SETUP_US);
-    }
-
-    float t = (magnitude - SPEED_DEADBAND) / (1.0f - SPEED_DEADBAND);  // rescale so the deadband edge lands on min
-    float freq_hz = STEPPER_MIN_FREQ_HZ + t * (STEPPER_MAX_FREQ_HZ - STEPPER_MIN_FREQ_HZ);
-
-    float div = SYS_CLK_HZ / (freq_hz * (STEERING_WRAP + 1));
-    pwm_set_clkdiv(slice, std::clamp(div, 1.0f, 255.9375f));
     pwm_set_enabled(slice, true);
 }
 
@@ -131,7 +139,7 @@ static void set_speed(const DrivetrainMotor& motor, float speed) {
 }
 
 static void stop_all() {
-    set_speed(steering, 0.0f);
+    stop_steering();
     for (const DrivetrainMotor& motor : drivetrain) {
         set_speed(motor, 0.0f);
     }
@@ -141,7 +149,8 @@ static void stop_all() {
 // every frame is COBS-encoded and ends in a 0x00 byte, so a garbled or dropped byte only loses one frame
 // decoded frame: [type u8][payload][crc u16], crc is CRC-16/CCITT-FALSE over type + payload
 // all multi-byte values are little-endian
-//   jetson -> pico  MSG_DRIVE      0x01  f32 steering [-1, 1], f32 drivetrain [-1, 1]
+//   jetson -> pico  MSG_DRIVE      0x01  f32 steering position [-1, 1], f32 drivetrain speed [-1, 1]
+// steering: -1 = -half range, 0 = boot position (center), +1 = +half range
 //   pico -> jetson  MSG_TELEMETRY  0x02  f32 left rpm, f32 right rpm
 
 constexpr uint8_t MSG_DRIVE = 0x01;
@@ -232,15 +241,15 @@ static bool handle_frame(const uint8_t* encoded, size_t len) {
         return false;
     }
 
-    float steering_speed;
+    float steering_position;
     float drivetrain_speed;
-    memcpy(&steering_speed, &frame[1], sizeof(float));
+    memcpy(&steering_position, &frame[1], sizeof(float));
     memcpy(&drivetrain_speed, &frame[5], sizeof(float));
-    if (!std::isfinite(steering_speed) || !std::isfinite(drivetrain_speed)) {
+    if (!std::isfinite(steering_position) || !std::isfinite(drivetrain_speed)) {
         return false;
     }
 
-    set_speed(steering, steering_speed);
+    steering_motion.set_target(steering_position);
     for (const DrivetrainMotor& motor : drivetrain) {
         set_speed(motor, drivetrain_speed);
     }
@@ -284,6 +293,10 @@ int main() {
         if (!timed_out && absolute_time_diff_us(last_command, get_absolute_time()) > COMMAND_TIMEOUT_MS * 1000) {
             stop_all();
             timed_out = true;
+        }
+
+        if (!timed_out) {
+            update_steering();
         }
 
         // led on while commands are arriving
