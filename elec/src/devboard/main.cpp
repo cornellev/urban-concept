@@ -6,6 +6,7 @@
 #include "chuds/mcp_transport.hpp"
 #include "common/can_health.hpp"
 #include "common/interval.hpp"
+#include "common/status_blink.hpp"
 #include "config.hpp"
 #include "pico/stdlib.h"
 
@@ -64,8 +65,10 @@ std::optional<chuds::CanFrame> parse_line(const std::array<char, kMaxLine>& line
 int main() {
     stdio_init_all();
 
-    gpio_init(kStatusLed);
-    gpio_set_dir(kStatusLed, GPIO_OUT);
+    for (const unsigned led : kStatusLeds) {
+        gpio_init(led);
+        gpio_set_dir(led, GPIO_OUT);
+    }
 
     chuds::Mcp251863Transport can{{
         .sck  = kSpiSck,
@@ -97,6 +100,9 @@ int main() {
                 std::printf("%02X", static_cast<unsigned>(rx->data[j]));
             }
             std::printf("\n");
+            if (const auto m = chuds::decode(*rx)) {
+                cev::apply_status_blink(*m, chuds::devboard::kNodeId, blink);
+            }
         }
 
         for (int c = getchar_timeout_us(0); c != PICO_ERROR_TIMEOUT; c = getchar_timeout_us(0)) {
@@ -128,7 +134,9 @@ int main() {
 
         if (blink.due()) {
             led_on = !led_on;
-            gpio_put(kStatusLed, led_on);
+            for (const unsigned led : kStatusLeds) {
+                gpio_put(led, led_on);
+            }
         }
     }
 }

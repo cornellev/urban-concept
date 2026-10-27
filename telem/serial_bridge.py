@@ -1,5 +1,5 @@
 """
-Bridge a spi2canfd dev board's USB serial to a SocketCAN interface, usually vcan0
+Bridge a devboard's USB serial to a SocketCAN interface, usually vcan0
 
 Set up vcan0 once per boot:
     sudo modprobe vcan

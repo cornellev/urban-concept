@@ -7,9 +7,11 @@ target_include_directories(rp2040_mcp251863 PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/include
 )
 
-target_link_libraries(rp2040_mcp251863 PUBLIC
-    hardware_spi
-    pico_stdlib
+target_link_libraries(
+        rp2040_mcp251863 PUBLIC
+        hardware_spi
+        hardware_dma
+        pico_stdlib
 )
 
 target_compile_features(rp2040_mcp251863 PUBLIC cxx_std_23)
