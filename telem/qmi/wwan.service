@@ -1,0 +1,14 @@
+[Unit]
+Description=Cellular (LTE) data link
+After=network-online.target ModemManager.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/home/cev/urban-concept/telem/qmi/qmi-start.sh
+ExecStop=/home/cev/urban-concept/telem/qmi/qmi-stop.sh
+TimeoutStartSec=90
+
+[Install]
+WantedBy=multi-user.target
