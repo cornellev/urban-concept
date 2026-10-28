@@ -1,5 +1,3 @@
-set default-list
-
 # use powershell on windows
 set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
 
@@ -8,6 +6,10 @@ mod elec
 mod telem
 
 mod cev-lib
+
+[private]
+default:
+    @just --list
 
 # linux-only chuds targets (socketcan tests, chuds_demo) are skipped off linux
 # ci also checks formatting with treefmt (nix fmt) and runs lint as separate jobs

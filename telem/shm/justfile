@@ -1,4 +1,6 @@
-set default-list
+[private]
+default:
+    @just --list
 
 configure:
     cmake -S . -B build -G Ninja

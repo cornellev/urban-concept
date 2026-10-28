@@ -1,3 +1,5 @@
-set default-list
-
 mod shm
+
+[private]
+default:
+    @just --list
