@@ -1,3 +1,5 @@
-set default-list
-
 mod chuds
+
+[private]
+default:
+    @just --list
