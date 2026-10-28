@@ -64,6 +64,7 @@ struct Message {
 // structs are sent as raw bytes, so the host must be little endian
 static_assert(std::endian::native == std::endian::little);
 static_assert(std::numeric_limits<float>::is_iec559);
+static_assert(std::numeric_limits<double>::is_iec559);
 
 namespace detail {
 

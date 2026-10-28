@@ -90,6 +90,21 @@ TEST_CASE("format_message prints both aux boards' telemetry") {
     CHECK(std::string_view(line.data()) == "back_aux rpm 7/8 brake 900");
 }
 
+TEST_CASE("format_message prints the merceves drive command and telemetry") {
+    const auto drive = make_message(MsgClass::Command, merceves::kNodeId, MsgType::Update,
+                                    merceves::DriveCommand{-12.5, 1.25});
+    REQUIRE(drive.has_value());
+    std::array<char, 96> line{};
+    format_message(*drive, line);
+    CHECK(std::string_view(line.data()) == "merceves drive steering -12.50 deg 1.25 m/s");
+
+    const auto telem = make_message(MsgClass::Telemetry, merceves::kNodeId, MsgType::Update,
+                                    merceves::Telemetry{3.5, 3.75, -12.0});
+    REQUIRE(telem.has_value());
+    format_message(*telem, line);
+    CHECK(std::string_view(line.data()) == "merceves rps 3.50/3.75 steering -12.00 deg");
+}
+
 TEST_CASE("format_message does not print a telemetry frame on 0x08 as a body state") {
     const auto m = make_message(MsgClass::Telemetry, kBodyStateId, MsgType::Update, BodyState{});
     REQUIRE(m.has_value());

@@ -49,6 +49,20 @@ inline int format_message(const Message& m, std::span<char> out) {
                                  j->voltage, j->current, j->power, j->energy);
         }
     }
+    if (m.cls == MsgClass::Command && m.subaddress == merceves::kNodeId &&
+        m.type == MsgType::Update) {
+        if (const auto d = body_as<merceves::DriveCommand>(m)) {
+            return std::snprintf(out.data(), out.size(),
+                                 "merceves drive steering %.2f deg %.2f m/s", d->steering_angle,
+                                 d->velocity);
+        }
+    }
+    if (m.cls == MsgClass::Telemetry && m.subaddress == merceves::kNodeId) {
+        if (const auto t = body_as<merceves::Telemetry>(m)) {
+            return std::snprintf(out.data(), out.size(), "merceves rps %.2f/%.2f steering %.2f deg",
+                                 t->rpm_left, t->rpm_right, t->steering_angle);
+        }
+    }
     // not in the catalog, or its body size does not match
     return std::snprintf(
         out.data(), out.size(), "class %d subaddress 0x%02x type %d, %d body bytes",

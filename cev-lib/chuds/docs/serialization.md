@@ -22,7 +22,8 @@ Plus two invariants every body must uphold, each backed by an assert:
 - Fixed wire size. Each body carries `static_assert(sizeof(T) == <sum of field bytes>)`, so a
   change to a body's size fails to compile until the expected size is edited too.
 - Little-endian host with IEEE 754 floats, asserted once in `message.hpp`
-  (`std::endian::native == std::endian::little`, `std::numeric_limits<float>::is_iec559`).
+  (`std::endian::native == std::endian::little`, `std::numeric_limits<float>::is_iec559`,
+  `std::numeric_limits<double>::is_iec559`).
 
 ## Why the marker
 

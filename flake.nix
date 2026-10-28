@@ -36,6 +36,9 @@
               # only run-clang-tidy, the rest of the unwrapped clang would shadow the compiler
               (writeShellScriptBin "run-clang-tidy" ''exec ${llvmPackages.clang-unwrapped}/bin/run-clang-tidy "$@"'')
               gh
+              # auto/chuds_zenoh
+              zenoh-c
+              zenoh-cpp
             ];
 
             # pico-sdk is vendored at vendor/pico-sdk

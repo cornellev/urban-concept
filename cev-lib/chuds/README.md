@@ -197,6 +197,7 @@ states after 1 s without one.
 | front_aux  | `0x10`     | rpm_left, rpm_right, steering   | turn L/R, headlights, horn |
 | back_aux   | `0x20`     | rpm_left, rpm_right, brake      | turn L/R, wiper            |
 | joulemeter | `0x30`     | voltage, current, power, energy | none                       |
+| merceves   | `0x50`     | rpm_left, rpm_right, steering   | none                       |
 
 Turn lamps light only while the `kBlinkPhase` bit is set. The VCU toggles it, so every node blinks
 in phase. A node that hears no `BodyState` for 1 s falls back to safe states: horn off, wiper
@@ -207,6 +208,10 @@ front_aux, back_aux, and joulemeter also take a `StatusBlink` `Update` on `0x1NN
 subaddress, that sets their status LED's blink half-period in ms. They ignore 0, and the period
 returns to the firmware default on reset. Dev boards running `elec/src/devboard` take it too, on
 the shared subaddress `0x40`, so one command reaches every one of them.
+
+The merceves board takes a `DriveCommand` `Update` on `0x150`: target steering angle in degrees
+and velocity in m/s. Its telemetry carries the back wheels' speed in rotations/s and the steering
+angle in degrees.
 
 For bench testing on Linux, `chudsctl` (`build/tools/chudsctl`) sends and prints messages by name.
 The interface defaults to `can0`, and `-i` picks another:

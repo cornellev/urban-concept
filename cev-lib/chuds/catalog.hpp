@@ -89,3 +89,27 @@ namespace chuds::devboard {
 constexpr std::uint8_t kNodeId = 0x40;
 
 }  // namespace chuds::devboard
+
+namespace chuds::merceves {
+
+// this node's id: command target and telemetry source
+constexpr std::uint8_t kNodeId = 0x50;
+
+// command body sent to the merceves board
+struct DriveCommand {
+    double steering_angle{};  // degrees
+    double velocity{};        // m/s
+    static constexpr bool is_chuds_wire_body = true;
+};
+static_assert(sizeof(DriveCommand) == 16);
+
+// telemetry body, published by the merceves board
+struct Telemetry {
+    double rpm_left{};        // back left wheel, rotations/s
+    double rpm_right{};       // back right wheel, rotations/s
+    double steering_angle{};  // degrees
+    static constexpr bool is_chuds_wire_body = true;
+};
+static_assert(sizeof(Telemetry) == 24);
+
+}  // namespace chuds::merceves
