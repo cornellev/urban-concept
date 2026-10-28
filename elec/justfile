@@ -1,5 +1,3 @@
-set default-list
-
 # use powershell on windows
 set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
 
@@ -8,6 +6,10 @@ set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
 sep := if os() == "windows" { ";" } else { ":" }
 tools := module_directory() / ".tools" / "picotool" + sep + module_directory() / ".tools" / "arm-gnu-toolchain" / "bin" + sep
 export PATH := if env("ELEC_SYSTEM_TOOLS", "") == "" { tools + env("PATH") } else { env("PATH") }
+
+[private]
+default:
+    @just --list
 
 # configure all targets
 configure:
