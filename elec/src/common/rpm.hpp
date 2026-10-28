@@ -44,16 +44,15 @@ inline void rpm_counter_init(RpmCounter& counter, unsigned offset, unsigned pin)
 
 // edges since the previous call
 inline std::uint16_t rpm_counter_take(RpmCounter& counter) {
-    std::uint32_t x = 0;
-    // queued words are stale, the one after them is fresh
-    for (unsigned n = pio_sm_get_rx_fifo_level(pio0, counter.sm) + 1; n > 0; n--) {
-        x = pio_sm_get_blocking(pio0, counter.sm);
+    std::uint32_t total = counter.last;
+
+    while (!pio_sm_is_rx_fifo_empty(pio0, counter.sm)) {
+        total = 0u - pio_sm_get(pio0, counter.sm);
     }
-    // x counts down from 0, so negate
-    const std::uint32_t total = 0u - x;
-    // unsigned, so right across a wrap
-    const std::uint32_t edges = total - counter.last;
-    counter.last              = total;
+
+    const uint32_t edges = total - counter.last;
+    counter.last         = total;
+
     // telemetry field is 16 bits
     return static_cast<std::uint16_t>(edges);
 }
