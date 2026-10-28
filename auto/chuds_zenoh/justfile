@@ -1,4 +1,6 @@
-set default-list
+[private]
+default:
+    @just --list
 
 configure:
     cmake -S . -B build -G Ninja
@@ -11,3 +13,8 @@ test: build
 
 clean:
     cmake -E rm -rf build
+
+# lint every file the build compiles, except fetched and generated code
+[unix]
+lint: configure
+    run-clang-tidy -p build -quiet '^((?!/build/).)*$'

@@ -1,0 +1,5 @@
+mod chuds_zenoh
+
+[private]
+default:
+    @just --list

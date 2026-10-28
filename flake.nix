@@ -1,6 +1,9 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    # only for zenoh: 1.10.0 in nixpkgs above points cmake at libzenohc in its dev output
+    # drop it once nixpkgs above has zenoh-c 1.10.1, which keeps the firmware toolchain pinned
+    nixpkgs-zenoh.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
@@ -21,7 +24,12 @@
       imports = [ treefmt-nix.flakeModule ];
 
       perSystem =
-        { pkgs, config, ... }:
+        {
+          pkgs,
+          config,
+          inputs',
+          ...
+        }:
         {
           devShells.default = pkgs.mkShell {
             packages = with pkgs; [
@@ -37,8 +45,8 @@
               (writeShellScriptBin "run-clang-tidy" ''exec ${llvmPackages.clang-unwrapped}/bin/run-clang-tidy "$@"'')
               gh
               # auto/chuds_zenoh
-              zenoh-c
-              zenoh-cpp
+              inputs'.nixpkgs-zenoh.legacyPackages.zenoh-c
+              inputs'.nixpkgs-zenoh.legacyPackages.zenoh-cpp
             ];
 
             # pico-sdk is vendored at vendor/pico-sdk
