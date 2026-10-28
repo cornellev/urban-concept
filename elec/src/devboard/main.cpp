@@ -3,7 +3,11 @@
 #include <cstdio>
 #include <optional>
 
+#include "chuds/catalog.hpp"
+#include "chuds/frame.hpp"
+#include "chuds/ids.hpp"
 #include "chuds/mcp_transport.hpp"
+#include "chuds/message.hpp"
 #include "common/can_health.hpp"
 #include "common/interval.hpp"
 #include "common/status_blink.hpp"
@@ -15,6 +19,8 @@ constexpr std::uint32_t kBlinkHalfPeriodMs = 500;
 constexpr int kMaxRxPerPass = 8;
 // "7FF##1" plus 64 bytes as hex
 constexpr std::size_t kMaxLine = 6 + 2 * chuds::kMaxFdPayload;
+
+namespace {
 
 // value of one hex digit, or -1
 int hex_digit(char c) {
@@ -60,6 +66,57 @@ std::optional<chuds::CanFrame> parse_line(const std::array<char, kMaxLine>& line
     return f;
 }
 
+// a serial line being read, kept across loop passes
+struct LineReader {
+    std::array<char, kMaxLine> line{};
+    std::size_t len = 0;
+    bool too_long{};
+};
+
+// print each waiting bus frame as a line, and act on a StatusBlink to this board
+void forward_rx(chuds::Mcp251863Transport& can, cev::Interval& blink) {
+    for (int i = 0; i < kMaxRxPerPass; ++i) {
+        const auto rx = can.recv();
+        if (!rx) {
+            return;
+        }
+        std::printf("%03X##1", static_cast<unsigned>(rx->id.raw()));
+        for (std::size_t j = 0; j < rx->len; ++j) {
+            std::printf("%02X", static_cast<unsigned>(rx->data[j]));
+        }
+        std::printf("\n");
+        if (const auto m = chuds::decode(*rx)) {
+            cev::apply_status_blink(*m, chuds::devboard::kNodeId, blink);
+        }
+    }
+}
+
+// read waiting serial input, and send each complete line onto the bus
+void forward_serial(chuds::Mcp251863Transport& can, LineReader& r) {
+    for (int c = getchar_timeout_us(0); c != PICO_ERROR_TIMEOUT; c = getchar_timeout_us(0)) {
+        if (c == '\r') {
+            continue;
+        }
+        if (c != '\n') {
+            if (r.len < r.line.size()) {
+                r.line[r.len++] = static_cast<char>(c);
+            } else {
+                r.too_long = true;
+            }
+            continue;
+        }
+        const auto f = r.too_long ? std::nullopt : parse_line(r.line, r.len);
+        if (!f) {
+            std::printf("bad line\n");
+        } else if (!can.send(*f)) {
+            std::printf("can tx failed\n");
+        }
+        r = {};
+    }
+}
+
+}  // namespace
+
 // serial bridge: every frame from the bus goes out as a line on usb serial, and every line in goes onto the bus
 // lines that are not frames are status text for a human
 int main() {
@@ -80,52 +137,15 @@ int main() {
     }};
 
     bool led_on{};
-    std::array<char, kMaxLine> line{};
-    std::size_t line_len = 0;
-    bool line_too_long{};
+    LineReader reader;
     cev::Interval blink{kBlinkHalfPeriodMs};
     cev::Interval report{1000};
     cev::CanHealth can_health;
 
     while (true) {
         can_health.check(can);
-
-        for (int i = 0; i < kMaxRxPerPass; ++i) {
-            const auto rx = can.recv();
-            if (!rx) {
-                break;
-            }
-            std::printf("%03X##1", static_cast<unsigned>(rx->id.raw()));
-            for (std::size_t j = 0; j < rx->len; ++j) {
-                std::printf("%02X", static_cast<unsigned>(rx->data[j]));
-            }
-            std::printf("\n");
-            if (const auto m = chuds::decode(*rx)) {
-                cev::apply_status_blink(*m, chuds::devboard::kNodeId, blink);
-            }
-        }
-
-        for (int c = getchar_timeout_us(0); c != PICO_ERROR_TIMEOUT; c = getchar_timeout_us(0)) {
-            if (c == '\r') {
-                continue;
-            }
-            if (c != '\n') {
-                if (line_len < line.size()) {
-                    line[line_len++] = static_cast<char>(c);
-                } else {
-                    line_too_long = true;
-                }
-                continue;
-            }
-            const auto f = line_too_long ? std::nullopt : parse_line(line, line_len);
-            if (!f) {
-                std::printf("bad line\n");
-            } else if (!can.send(*f)) {
-                std::printf("can tx failed\n");
-            }
-            line_len      = 0;
-            line_too_long = false;
-        }
+        forward_rx(can, blink);
+        forward_serial(can, reader);
 
         // repeated so a serial console opened after boot still sees it
         if (!can.ready() && report.due()) {
