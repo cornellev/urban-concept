@@ -1,3 +1,4 @@
+#include <atomic>
 #include <chrono>
 #include <csignal>
 #include <cstdio>
@@ -20,9 +21,10 @@ constexpr std::string_view kLeftRpmKey       = "cev/sensors/wheels/left_rpm";
 constexpr std::string_view kRightRpmKey      = "cev/sensors/wheels/right_rpm";
 constexpr std::string_view kSteeringAngleKey = "cev/sensors/steering_angle";
 
-volatile std::sig_atomic_t g_stop = 0;
+// atomic, not sig_atomic_t, since the signal may land on a zenoh thread
+std::atomic<bool> g_stop{false};
 
-void on_signal(int /*sig*/) { g_stop = 1; }
+void on_signal(int /*sig*/) { g_stop = true; }
 
 void publish(const zenoh::Session& session, std::string_view key, std::string payload) {
     zenoh::Session::PutOptions options;
@@ -88,8 +90,8 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "failed to open a zenoh session: %d\n", err);
         return 1;
     }
-    // zenoh calls this on its own thread, while the loop below reads the bus
-    // safe because socketcan send and recv are separate syscalls on one socket
+    // zenoh calls this on its own threads, while the loop below reads the bus
+    // safe because SocketCanTransport allows send and recv on different threads
     auto sub = session.declare_subscriber(
         zenoh::KeyExpr(kControlKey),
         [&bus](const zenoh::Sample& sample) { on_control(bus, sample); }, zenoh::closures::none);
@@ -97,7 +99,7 @@ int main(int argc, char** argv) {
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
 
-    while (g_stop == 0) {
+    while (!g_stop) {
         if (!bus.wait(std::chrono::milliseconds{200})) {
             continue;
         }

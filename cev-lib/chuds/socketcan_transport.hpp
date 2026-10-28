@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cerrno>
 #include <chrono>
 #include <climits>
@@ -26,6 +27,8 @@ namespace chuds {
 // a Transport over a Linux SocketCAN raw CAN-FD socket
 // non-blocking: recv reports Empty on a quiet bus, BusOff on a dead one
 // bus-off holds from the bus-off error frame until a restart or any received frame
+// send and recv may run on different threads
+// open, move, and destruction must not overlap any other call
 class SocketCanTransport {
    public:
     SocketCanTransport() = default;
@@ -36,7 +39,7 @@ class SocketCanTransport {
     SocketCanTransport& operator=(const SocketCanTransport&) = delete;
 
     SocketCanTransport(SocketCanTransport&& other) noexcept
-        : fd_(other.fd_), bus_off_(other.bus_off_) {
+        : fd_(other.fd_), bus_off_(other.bus_off_.load()) {
         other.fd_ = -1;
     }
 
@@ -44,7 +47,7 @@ class SocketCanTransport {
         if (this != &other) {
             close_fd();
             fd_       = other.fd_;
-            bus_off_  = other.bus_off_;
+            bus_off_  = other.bus_off_.load();
             other.fd_ = -1;
         }
         return *this;
@@ -226,7 +229,8 @@ class SocketCanTransport {
     }
 
     int fd_{-1};
-    bool bus_off_{false};
+    // atomic because send reads it while recv on another thread writes it
+    std::atomic<bool> bus_off_{false};
 };
 
 static_assert(Transport<SocketCanTransport>);
