@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <optional>
 
+#include "chuds/chuds.hpp"
 #include "chuds/mcp_transport.hpp"
 #include "common/can_health.hpp"
 #include "common/interval.hpp"
@@ -15,6 +16,8 @@ constexpr std::uint32_t kBlinkHalfPeriodMs = 500;
 constexpr int kMaxRxPerPass = 8;
 // "7FF##1" plus 64 bytes as hex
 constexpr std::size_t kMaxLine = 6 + 2 * chuds::kMaxFdPayload;
+
+namespace {
 
 // value of one hex digit, or -1
 int hex_digit(char c) {
@@ -60,8 +63,11 @@ std::optional<chuds::CanFrame> parse_line(const std::array<char, kMaxLine>& line
     return f;
 }
 
+}  // namespace
+
 // serial bridge: every frame from the bus goes out as a line on usb serial, and every line in goes onto the bus
 // lines that are not frames are status text for a human
+// NOLINTNEXTLINE(readability-function-cognitive-complexity) irreducible serial bridge loop
 int main() {
     stdio_init_all();
 
