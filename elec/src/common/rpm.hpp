@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>
+#include <stdint.h>
 
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
@@ -13,7 +13,7 @@ struct RpmCounter {
     // pio0 state machine index, 0-3
     unsigned sm;
     // edge total at the previous read
-    std::uint32_t last;
+    uint32_t last;
 };
 
 inline RpmCounter g_rpm_left{};
@@ -43,8 +43,8 @@ inline void rpm_counter_init(RpmCounter& counter, unsigned offset, unsigned pin)
 }
 
 // edges since the previous call
-inline std::uint16_t rpm_counter_take(RpmCounter& counter) {
-    std::uint32_t total = counter.last;
+inline uint16_t rpm_counter_take(RpmCounter& counter) {
+    uint32_t total = counter.last;
 
     while (!pio_sm_is_rx_fifo_empty(pio0, counter.sm)) {
         total = 0u - pio_sm_get(pio0, counter.sm);
@@ -54,7 +54,7 @@ inline std::uint16_t rpm_counter_take(RpmCounter& counter) {
     counter.last         = total;
 
     // telemetry field is 16 bits
-    return static_cast<std::uint16_t>(edges);
+    return static_cast<uint16_t>(edges);
 }
 
 // count rising edges on two wheel-speed inputs
@@ -67,8 +67,8 @@ inline void rpm_init(unsigned left_pin, unsigned right_pin) {
 }
 
 struct RpmCounts {
-    std::uint16_t left;
-    std::uint16_t right;
+    uint16_t left;
+    uint16_t right;
 };
 
 // edges since the previous call, then reset
