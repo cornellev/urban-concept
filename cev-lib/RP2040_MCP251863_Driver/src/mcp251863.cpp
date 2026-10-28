@@ -1,14 +1,13 @@
 #include "mcp251863.hpp"
 
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <optional>
-#include <type_traits>
+#include <utility>
 
-// implementation of C++23 std::to_underlying
-template <typename T>
-constexpr auto to_underlying(T value) -> std::underlying_type_t<T> {
-    return static_cast<typename std::underlying_type<T>::type>(value);
-}
-
+// a macro, since it returns from the function that uses it
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
 #define MCP_TRY(expr)           \
     do {                        \
         const Error e = (expr); \
@@ -43,7 +42,7 @@ std::optional<PayloadSize> canfd_len_to_dlc(size_t len) {
     }
 }
 
-static uint8_t canfd_dlc_to_len(uint8_t dlc) {
+uint8_t canfd_dlc_to_len(uint8_t dlc) {
     switch (static_cast<PayloadSize>(dlc & 0x0F)) {
         case PayloadSize::PL_SIZE_MCP_0: return 0;
         case PayloadSize::PL_SIZE_MCP_1: return 1;
@@ -149,8 +148,8 @@ uint32_t pack_id_word(const CanFdFrame& frame) {
         return ((frame.id >> 18) & 0x7FF) | ((frame.id & 0x3FFFF) << 11);
     }
 
-    uint32_t sid   = frame.id & 0x7FF;
-    uint32_t sid11 = (frame.sid11 || (frame.id > 0x7FF)) ? ((frame.id >> 11) & 0x01) : 0;
+    const uint32_t sid   = frame.id & 0x7FF;
+    const uint32_t sid11 = (frame.sid11 || (frame.id > 0x7FF)) ? ((frame.id >> 11) & 0x01) : 0;
     return sid | (sid11 << 29);
 }
 
@@ -178,7 +177,7 @@ Error finalize_frame_dlc(CanFdFrame* frame) {
         if (!dlc_opt) {
             return Error::InvalidPayloadSize;
         }
-        frame->dlc = to_underlying(*dlc_opt);
+        frame->dlc = std::to_underlying(*dlc_opt);
         return Error::None;
     }
 
@@ -186,7 +185,7 @@ Error finalize_frame_dlc(CanFdFrame* frame) {
         return Error::InvalidPayloadSize;
     }
     frame->dlc = frame->len;
-    frame->brs = 0;
+    frame->brs = false;
     return Error::None;
 }
 
@@ -209,8 +208,8 @@ Error validate_tx_frame(const CanFdFrame& frame) {
 CanFdFrame decode_rx_header(const uint8_t* header, bool timestampEnabled) {
     CanFdFrame frame{};
 
-    uint32_t word0        = load_word(header);
-    uint32_t word1        = load_word(header + 4);
+    const uint32_t word0  = load_word(header);
+    const uint32_t word1  = load_word(header + 4);
     frame.dlc             = word1 & 0x0F;
     frame.ide             = (word1 & (1UL << 4)) != 0;
     frame.rtr             = (word1 & (1UL << 5)) != 0;
@@ -239,8 +238,8 @@ Error create_message_obj(uint8_t* dst, const CanFdFrame& frame, size_t* objectSi
     MCP_TRY(validate_tx_frame(txFrame));
     MCP_TRY(finalize_frame_dlc(&txFrame));
 
-    size_t rawSize = 8 + (size_t)txFrame.len;
-    size_t objSize = (rawSize + 3) & ~static_cast<size_t>(3);  // round up to multiple of 4
+    const size_t rawSize = 8 + (size_t)txFrame.len;
+    const size_t objSize = (rawSize + 3) & ~static_cast<size_t>(3);  // round up to multiple of 4
 
     memset(dst, 0, objSize);
     store_word(dst, pack_id_word(txFrame));
@@ -249,7 +248,7 @@ Error create_message_obj(uint8_t* dst, const CanFdFrame& frame, size_t* objectSi
         dst[8 + i] = txFrame.data[i];
     }
 
-    if (objectSize != NULL) {
+    if (objectSize != nullptr) {
         *objectSize = objSize;
     }
     return Error::None;
@@ -258,17 +257,14 @@ Error create_message_obj(uint8_t* dst, const CanFdFrame& frame, size_t* objectSi
 }  // namespace
 
 MCP251863::MCP251863(spi_inst_t* ispi, uint iCSPin, uint iSTBYPin, uint iINTPin, uint iINT0Pin,
-                     uint iINT1Pin) {
-    spi_                 = ispi;
-    chipSelectPin_       = iCSPin;
-    standbyPin_          = iSTBYPin;
-    intPin_              = iINTPin;
-    int0Pin_             = iINT0Pin;
-    int1Pin_             = iINT1Pin;
-    writeMode_           = WriteMode::WM_MCP_NORM;
-    readMode_            = ReadMode::RM_MCP_NORM;
-    rxTimestampsEnabled_ = false;
-    instance_            = this;
+                     uint iINT1Pin)
+    : spi_(ispi),
+      chipSelectPin_(iCSPin),
+      standbyPin_(iSTBYPin),
+      intPin_(iINTPin),
+      int0Pin_(iINT0Pin),
+      int1Pin_(iINT1Pin) {
+    instance_ = this;
 }
 
 // Checks if a FIFO was actually configured and in the direction expected
@@ -283,15 +279,15 @@ Error MCP251863::checkFifo(uint8_t fifoNum, bool wantTx) const {
     return Error::None;
 }
 
-void MCP251863::csSelect() {
+void MCP251863::csSelect() const {
     asm volatile("nop \n nop \n nop");
-    gpio_put(chipSelectPin_, 0);
+    gpio_put(chipSelectPin_, false);
     asm volatile("nop \n nop \n nop");
 }
 
-void MCP251863::csDeselect() {
+void MCP251863::csDeselect() const {
     asm volatile("nop \n nop \n nop");
-    gpio_put(chipSelectPin_, 1);
+    gpio_put(chipSelectPin_, true);
     asm volatile("nop \n nop \n nop");
 }
 
@@ -304,7 +300,7 @@ Error MCP251863::dmaWriteAddr(uint16_t startAddr, const uint8_t* data, size_t le
     }
 
     // form message CCCC-AAAAAAAAAAAA
-    tx_buff[0] = (to_underlying(Command::CMD_MCP_WRITA) << 4) | (startAddr >> 8);
+    tx_buff[0] = (std::to_underlying(Command::CMD_MCP_WRITA) << 4) | (startAddr >> 8);
     tx_buff[1] = (startAddr << 4) >> 4;
 
     memcpy(&tx_buff[2], data, len);
@@ -325,7 +321,7 @@ Error MCP251863::writeAddr(uint16_t startAddr, const uint8_t* data, size_t len) 
     // form message CCCC-AAAAAAAAAAAA
     uint8_t message[2];
 
-    message[0] = (to_underlying(Command::CMD_MCP_WRITA) << 4) | (startAddr >> 8);
+    message[0] = (std::to_underlying(Command::CMD_MCP_WRITA) << 4) | (startAddr >> 8);
     message[1] = (startAddr << 4) >> 4;
 
     csSelect();
@@ -340,13 +336,13 @@ Error MCP251863::dmaReadAddr(uint16_t startAddr, uint8_t* dst, size_t len) {
     if (dst == nullptr) {
         return Error::NullPointer;
     }
-    size_t paddedLen = (len + 3) / 4 * 4 + 2;
+    const size_t paddedLen = (len + 3) / 4 * 4 + 2;
     if (paddedLen > MAX_TRANSFER) {
         return Error::InvalidPayloadSize;
     }
 
     // form message CCCC-AAAAAAAAAAAA
-    tx_buff[0] = (to_underlying(Command::CMD_MCP_READA) << 4) | (startAddr >> 8);
+    tx_buff[0] = (std::to_underlying(Command::CMD_MCP_READA) << 4) | (startAddr >> 8);
     tx_buff[1] = (startAddr << 4) >> 4;
 
     user_rx_buff = dst;
@@ -365,7 +361,7 @@ Error MCP251863::readAddr(uint16_t startAddr, uint8_t* dst, size_t len) {
     uint8_t message[2] = {0};
 
     // form message CCCC-AAAAAAAAAAAA
-    message[0] = (to_underlying(Command::CMD_MCP_READA) << 4) | (startAddr >> 8);
+    message[0] = (std::to_underlying(Command::CMD_MCP_READA) << 4) | (startAddr >> 8);
     message[1] = (startAddr << 4) >> 4;
 
     csSelect();
@@ -429,7 +425,7 @@ Error MCP251863::pollRegisterBit(uint16_t addr, uint8_t mask, bool wantSet, Erro
 
 Error MCP251863::readOpMode(uint8_t* opmod) {
     uint8_t buff = 0;
-    MCP_TRY(readAddr(to_underlying(RegisterAddress::REG_MCP_C1CON) + 2, &buff, 1));
+    MCP_TRY(readAddr(std::to_underlying(RegisterAddress::REG_MCP_C1CON) + 2, &buff, 1));
     *opmod = buff >> 5;
     return Error::None;
 }
@@ -438,7 +434,7 @@ Error MCP251863::waitForOpMode(ControllerMode target, int maxIters, uint32_t del
     for (int i = 0; i < maxIters; i++) {
         uint8_t mode = 0;
         MCP_TRY(readOpMode(&mode));
-        if (mode == to_underlying(target)) {
+        if (mode == std::to_underlying(target)) {
             return Error::None;
         }
         sleep_us(delayUs);
@@ -452,7 +448,9 @@ Error MCP251863::waitForOpMode(ControllerMode target) { return waitForOpMode(tar
 Error MCP251863::readFifoUserAddress(uint16_t fifoPointAddr, size_t objectSize,
                                      uint16_t* messageAddr) {
     uint16_t ua = 0;
-    MCP_TRY(readAddr(fifoPointAddr, (uint8_t*)&ua, 2));
+    // the register is little-endian like the rp2040, so its 2 bytes read straight into ua
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+    MCP_TRY(readAddr(fifoPointAddr, reinterpret_cast<uint8_t*>(&ua), 2));
     // RAM is 2 KB (0x400 - 0xBFF)
     // Thus buff value should be between 0x00 and 0x800 - objectSize
     if (ua > 0x800 - objectSize) {
@@ -470,18 +468,18 @@ Error MCP251863::initDMA() {
         dma_channel_unclaim(dma_rx_chan);
         dmaInitialized = false;
     }
-    int tx      = dma_claim_unused_channel(false);
-    dma_tx_chan = tx;
-    dma_tx_cfg  = dma_channel_get_default_config(dma_tx_chan);
+    const int tx = dma_claim_unused_channel(false);
+    dma_tx_chan  = tx;
+    dma_tx_cfg   = dma_channel_get_default_config(dma_tx_chan);
     channel_config_set_transfer_data_size(&dma_tx_cfg, DMA_SIZE_8);
     channel_config_set_read_increment(&dma_tx_cfg, true);
     channel_config_set_write_increment(&dma_tx_cfg, false);
     channel_config_set_dreq(&dma_tx_cfg, spi_get_dreq(spi_, true));
     dma_channel_configure(dma_tx_chan, &dma_tx_cfg, &spi_get_hw(spi_)->dr, tx_buff, 0, false);
 
-    int rx      = dma_claim_unused_channel(false);
-    dma_rx_chan = rx;
-    dma_rx_cfg  = dma_channel_get_default_config(dma_rx_chan);
+    const int rx = dma_claim_unused_channel(false);
+    dma_rx_chan  = rx;
+    dma_rx_cfg   = dma_channel_get_default_config(dma_rx_chan);
     channel_config_set_transfer_data_size(&dma_rx_cfg, DMA_SIZE_8);
     channel_config_set_read_increment(&dma_rx_cfg, false);
     channel_config_set_write_increment(&dma_rx_cfg, true);
@@ -523,7 +521,7 @@ void MCP251863::spiTransferDMA(size_t len) {
     dma_channel_set_trans_count(dma_tx_chan, len, false);
     dma_channel_set_trans_count(dma_rx_chan, len, false);
 
-    gpio_put(chipSelectPin_, 0);
+    gpio_put(chipSelectPin_, false);
 
     // start both DMA channels
     dma_start_channel_mask((1u << dma_tx_chan) | (1u << dma_rx_chan));
@@ -540,12 +538,12 @@ void MCP251863::finishTransfer() {
     while (spi_is_busy(spi_)) {
         tight_loop_contents();
     }
-    gpio_put(chipSelectPin_, 1);
+    gpio_put(chipSelectPin_, true);
 
     if (fifo_op_state == FifoOperationState::POPPING) {
         pending_fifo_uinc = true;
         memcpy(user_rx_buff, &rx_buff[2], transfer_len);
-        user_frame.valid = 1;
+        user_frame.valid = true;
         fifo_op_state    = FifoOperationState::POP_DONE;
     }
     if (fifo_op_state == FifoOperationState::PUSHING) {
@@ -568,7 +566,7 @@ void MCP251863::abort() {
         dma_channel_abort(dma_tx_chan);
         dma_channel_abort(dma_rx_chan);
     }
-    gpio_put(chipSelectPin_, 1);
+    gpio_put(chipSelectPin_, true);
     fifo_op_state     = FifoOperationState::IDLE;
     pending_fifo_uinc = false;
 }
@@ -590,10 +588,10 @@ Error MCP251863::init(const InitConfig& config) {
     lastConfig = config;
 
     gpio_init(chipSelectPin_);
-    gpio_put(chipSelectPin_, 1);
+    gpio_put(chipSelectPin_, true);
     gpio_set_dir(chipSelectPin_, GPIO_OUT);
     gpio_init(standbyPin_);
-    gpio_put(standbyPin_, to_underlying(TransceiverMode::TMODE_MCP_STBY));
+    gpio_put(standbyPin_, std::to_underlying(TransceiverMode::TMODE_MCP_STBY));
     gpio_set_dir(standbyPin_, GPIO_OUT);
 
     (void)setTransceiverMode(TransceiverMode::TMODE_MCP_STBY);
@@ -622,35 +620,33 @@ Error MCP251863::init(const InitConfig& config) {
 }
 
 Error MCP251863::configureDevice(const InitConfig& config) {
-    uint8_t zero = 0;
-    uint8_t one  = 0;
     uint32_t reg = 0;
 
     MCP_TRY(reset());
     sleep_ms(10);
 
-    MCP_TRY(pollRegisterBit(to_underlying(RegisterAddress::REG_MCP_OSC) + 1, 1 << 2, true,
+    MCP_TRY(pollRegisterBit(std::to_underlying(RegisterAddress::REG_MCP_OSC) + 1, 1 << 2, true,
                             Error::OscillatorTimeout));
 
     MCP_TRY(setControllerMode(ControllerMode::CMODE_MCP_CONF));
 
-    uint8_t osc = (config.enablePll ? 0x01 : 0x00) | (config.sclkDiv2 ? 0x10 : 0x00);
-    MCP_TRY(writeAddr(to_underlying(RegisterAddress::REG_MCP_OSC), &osc, 1));
+    const uint8_t osc = (config.enablePll ? 0x01 : 0x00) | (config.sclkDiv2 ? 0x10 : 0x00);
+    MCP_TRY(writeAddr(std::to_underlying(RegisterAddress::REG_MCP_OSC), &osc, 1));
     if (config.enablePll) {
         // PLLRDY
-        MCP_TRY(pollRegisterBit(to_underlying(RegisterAddress::REG_MCP_OSC) + 1, 0x01, true,
+        MCP_TRY(pollRegisterBit(std::to_underlying(RegisterAddress::REG_MCP_OSC) + 1, 0x01, true,
                                 Error::PllTimeout));
     }
 
     if (config.sclkDiv2) {
         // SCLKRDY
-        MCP_TRY(pollRegisterBit(to_underlying(RegisterAddress::REG_MCP_OSC) + 1, 1 << 4, true,
+        MCP_TRY(pollRegisterBit(std::to_underlying(RegisterAddress::REG_MCP_OSC) + 1, 1 << 4, true,
                                 Error::SclkdivTimeout));
     }
 
     MCP_TRY(setBitTiming(config.nominalBitTiming, config.dataBitTiming));
 
-    MCP_TRY(writeReg(to_underlying(RegisterAddress::REG_MCP_C1TDC),
+    MCP_TRY(writeReg(std::to_underlying(RegisterAddress::REG_MCP_C1TDC),
                      encode_tdc(config.enableTdc, config.tdcOffset)));
 
     rxTimestampsEnabled_ = config.rxTimestampEnable != 0;
@@ -659,23 +655,23 @@ Error MCP251863::configureDevice(const InitConfig& config) {
     // FifoInterruptFlag rxFlags[] = {FIFO_INT_MCP_NFNE, FIFO_INT_MCP_OVFL};
     // if (rxTimestampsEnabled_) {
     //     uint16_t rx_fifo_addr =
-    //         to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * (rxFifoNum_ - 1);
+    //         std::to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * (rxFifoNum_ - 1);
     //     MCP_TRY(updateByte(rx_fifo_addr, 0x00, 1 << 5));  // RXTSEN
     // }
 
     // clear interrupt flag registers
     reg = 0xFFFFFFFF;
-    MCP_TRY(writeReg(to_underlying(RegisterAddress::REG_MCP_C1RXIF), reg));
-    MCP_TRY(writeReg(to_underlying(RegisterAddress::REG_MCP_C1TXIF), reg));
-    MCP_TRY(writeReg(to_underlying(RegisterAddress::REG_MCP_C1RXOVIF), reg));
-    MCP_TRY(writeReg(to_underlying(RegisterAddress::REG_MCP_C1TXATIF), reg));
+    MCP_TRY(writeReg(std::to_underlying(RegisterAddress::REG_MCP_C1RXIF), reg));
+    MCP_TRY(writeReg(std::to_underlying(RegisterAddress::REG_MCP_C1TXIF), reg));
+    MCP_TRY(writeReg(std::to_underlying(RegisterAddress::REG_MCP_C1RXOVIF), reg));
+    MCP_TRY(writeReg(std::to_underlying(RegisterAddress::REG_MCP_C1TXATIF), reg));
     InterruptEnable interrupts[] = {
-        INT_EN_MCP_RXIE,    // RX
-        INT_EN_MCP_TXIE,    // TX
-        INT_EN_MCP_RXOVIE,  // RX overflow
-        INT_EN_MCP_TXATIE,  // transmit attempt
-        INT_EN_MCP_CERRIE,  // CAN bus error
-        INT_EN_MCP_SERRIE,  // system error
+        InterruptEnable::INT_EN_MCP_RXIE,    // RX
+        InterruptEnable::INT_EN_MCP_TXIE,    // TX
+        InterruptEnable::INT_EN_MCP_RXOVIE,  // RX overflow
+        InterruptEnable::INT_EN_MCP_TXATIE,  // transmit attempt
+        InterruptEnable::INT_EN_MCP_CERRIE,  // CAN bus error
+        InterruptEnable::INT_EN_MCP_SERRIE,  // system error
     };
     MCP_TRY(setInterrupts(interrupts, sizeof(interrupts) / sizeof(interrupts[0])));
     MCP_TRY(initDMA());
@@ -699,10 +695,10 @@ Error MCP251863::recover() {
 Error MCP251863::setBitTiming(BitTiming nominalTiming, BitTiming dataTiming) {
     MCP_TRY(validate_bit_timing(nominalTiming, dataTiming));
 
-    MCP_TRY(writeReg(to_underlying(RegisterAddress::REG_MCP_C1NBTCFG),
+    MCP_TRY(writeReg(std::to_underlying(RegisterAddress::REG_MCP_C1NBTCFG),
                      pack_nominal_bit_timing(nominalTiming)));
 
-    return writeReg(to_underlying(RegisterAddress::REG_MCP_C1DBTCFG),
+    return writeReg(std::to_underlying(RegisterAddress::REG_MCP_C1DBTCFG),
                     pack_data_bit_timing(dataTiming));
 }
 
@@ -711,10 +707,10 @@ Error MCP251863::reset() {
         return Error::Busy;
     }
 
-    Command cmd        = Command::CMD_MCP_RESET;
+    const Command cmd  = Command::CMD_MCP_RESET;
     uint8_t message[2] = {0};
 
-    message[0] = to_underlying(cmd) << 4;
+    message[0] = std::to_underlying(cmd) << 4;
 
     csSelect();
     spi_write_blocking(spi_, message, 2);
@@ -728,7 +724,8 @@ Error MCP251863::configureTxFifo(uint8_t fifoNum) {
 }
 
 Error MCP251863::configureTxFifo(uint8_t fifoNum, uint8_t prioNum) {
-    FifoInterruptFlag txFlags[] = {FIFO_INT_MCP_NFNE, FIFO_INT_MCP_TXAT};
+    FifoInterruptFlag txFlags[] = {FifoInterruptFlag::FIFO_INT_MCP_NFNE,
+                                   FifoInterruptFlag::FIFO_INT_MCP_TXAT};
     MCP_TRY(initGeneralPurposeFifo(fifoNum, FifoMode::FIFO_MODE_MCP_TX, lastConfig.txPayloadSize,
                                    lastConfig.txFifoDepth,
                                    prioNum,  // prioNum
@@ -740,7 +737,8 @@ Error MCP251863::configureTxFifo(uint8_t fifoNum, uint8_t prioNum) {
 
 Error MCP251863::configureRxFifo(uint8_t fifoNum, uint8_t fltNum, uint16_t canSID,
                                  uint16_t sidMask) {
-    FifoInterruptFlag rxFlags[] = {FIFO_INT_MCP_NFNE, FIFO_INT_MCP_OVFL};
+    FifoInterruptFlag rxFlags[] = {FifoInterruptFlag::FIFO_INT_MCP_NFNE,
+                                   FifoInterruptFlag::FIFO_INT_MCP_OVFL};
     MCP_TRY(initGeneralPurposeFifo(fifoNum, FifoMode::FIFO_MODE_MCP_RX, lastConfig.rxPayloadSize,
                                    lastConfig.rxFifoDepth,
                                    0,                                 // prioNum : don't care for RX
@@ -759,7 +757,7 @@ Error MCP251863::configureRxFifo(uint8_t fifoNum, uint16_t canSID) {
 
 Error MCP251863::initGeneralPurposeFifo(uint8_t fifoNum, FifoMode fifoMode, FifoPayloadSize plSize,
                                         uint8_t fSize, uint8_t prioNum, TxRetransmitMode retranMode,
-                                        FifoInterruptFlag* intFlagArray, size_t intFlagSize) {
+                                        const FifoInterruptFlag* intFlagArray, size_t intFlagSize) {
     if (fifoNum > 30) {
         return Error::InvalidFifoNum;
     }
@@ -769,7 +767,7 @@ Error MCP251863::initGeneralPurposeFifo(uint8_t fifoNum, FifoMode fifoMode, Fifo
     if (prioNum > 31) {
         return Error::InvalidArgument;
     }
-    uint8_t len = fifo_plsize_to_len(plSize);
+    const uint8_t len = fifo_plsize_to_len(plSize);
     if (len == 0) {
         return Error::InvalidPayloadSize;
     }
@@ -778,18 +776,18 @@ Error MCP251863::initGeneralPurposeFifo(uint8_t fifoNum, FifoMode fifoMode, Fifo
     }
 
     uint8_t buff[4];
-    uint16_t addr = to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * fifoNum;
+    const uint16_t addr = std::to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * fifoNum;
 
     uint8_t intFlags = 0;
     for (size_t i = 0; i < intFlagSize; i++) {
         intFlags |= static_cast<uint8_t>(intFlagArray[i]);
     }
 
-    buff[0] = intFlags | (to_underlying(fifoMode) << 7);
+    buff[0] = intFlags | (std::to_underlying(fifoMode) << 7);
     buff[1] = 0b00000000;
-    buff[2] = 0b00000000 | (to_underlying(retranMode) << 5) | prioNum;
+    buff[2] = 0b00000000 | (std::to_underlying(retranMode) << 5) | prioNum;
     // FSIZE stores depth-1 (0 = 1 message; 31 = 32 messages); caller passes 1..32
-    buff[3] = ((to_underlying(plSize) & 0b111) << 5) | ((fSize - 1) & 0x1F);
+    buff[3] = ((std::to_underlying(plSize) & 0b111) << 5) | ((fSize - 1) & 0x1F);
 
     MCP_TRY(writeAddr(addr, buff, 4));
     return Error::None;
@@ -802,14 +800,15 @@ Error MCP251863::disableFifo(uint8_t fifoNum) {
     if (!fifoInfo[fifoNum].configured) {
         return Error::None;
     }
-    uint16_t addr = to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * fifoNum;
+    const uint16_t addr = std::to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * fifoNum;
     // set FRESET bit to reset FIFO
     MCP_TRY(updateByte(addr + 1, 0x00, 0b00000100));
     // disable Filter attached to FIFO if FIFO is RX
     if (!fifoInfo[fifoNum].isTx) {
-        uint8_t flt_num       = fifoInfo[fifoNum].rxFltNum;
-        uint16_t flt_addr     = to_underlying(RegisterAddress::REG_MCP_C1FLTCONx) + flt_num;
-        uint16_t flt_obj_addr = to_underlying(RegisterAddress::REG_MCP_C1FLTOBJx) + 8 * flt_num;
+        const uint8_t flt_num   = fifoInfo[fifoNum].rxFltNum;
+        const uint16_t flt_addr = std::to_underlying(RegisterAddress::REG_MCP_C1FLTCONx) + flt_num;
+        const uint16_t flt_obj_addr =
+            std::to_underlying(RegisterAddress::REG_MCP_C1FLTOBJx) + 8 * flt_num;
 
         uint8_t buff[4];
 
@@ -829,7 +828,7 @@ Error MCP251863::disableFifo(uint8_t fifoNum) {
     return Error::None;
 }
 
-Error MCP251863::initTransmitEventFifo(uint8_t fSize, FifoInterruptFlag* intFlagArray,
+Error MCP251863::initTransmitEventFifo(uint8_t fSize, const FifoInterruptFlag* intFlagArray,
                                        size_t intFlagSize) {
     if (fSize < 1 || fSize > 32) {
         return Error::InvalidFifoDepth;
@@ -839,7 +838,7 @@ Error MCP251863::initTransmitEventFifo(uint8_t fSize, FifoInterruptFlag* intFlag
     }
 
     uint8_t buff[4];
-    uint16_t addr = to_underlying(RegisterAddress::REG_MCP_C1TEFCON);
+    const uint16_t addr = std::to_underlying(RegisterAddress::REG_MCP_C1TEFCON);
 
     uint8_t intFlags = 0;
     for (size_t i = 0; i < intFlagSize; i++) {
@@ -855,8 +854,8 @@ Error MCP251863::initTransmitEventFifo(uint8_t fSize, FifoInterruptFlag* intFlag
 }
 
 Error MCP251863::initTransmitQueue(FifoPayloadSize plSize, uint8_t fSize, uint8_t prioNum,
-                                   TxRetransmitMode retranMode, FifoInterruptFlag* intFlagArray,
-                                   size_t intFlagSize) {
+                                   TxRetransmitMode retranMode,
+                                   const FifoInterruptFlag* intFlagArray, size_t intFlagSize) {
     if (fSize < 1 || fSize > 32) {
         return Error::InvalidFifoDepth;
     }
@@ -871,7 +870,7 @@ Error MCP251863::initTransmitQueue(FifoPayloadSize plSize, uint8_t fSize, uint8_
     }
 
     uint8_t buff[4];
-    uint16_t addr = to_underlying(RegisterAddress::REG_MCP_C1TXQCON);
+    const uint16_t addr = std::to_underlying(RegisterAddress::REG_MCP_C1TXQCON);
 
     uint8_t intFlags = 0;
     for (size_t i = 0; i < intFlagSize; i++) {
@@ -882,8 +881,8 @@ Error MCP251863::initTransmitQueue(FifoPayloadSize plSize, uint8_t fSize, uint8_
 
     buff[0] = 0b00000000 | intFlags;
     buff[1] = 0b00000000;
-    buff[2] = 0b00000000 | (to_underlying(retranMode) << 5) | prioNum;
-    buff[3] = ((to_underlying(plSize) & 0b111) << 5) | ((fSize - 1) & 0x1F);
+    buff[2] = 0b00000000 | (std::to_underlying(retranMode) << 5) | prioNum;
+    buff[3] = ((std::to_underlying(plSize) & 0b111) << 5) | ((fSize - 1) & 0x1F);
 
     return writeAddr(addr, buff, 4);
 }
@@ -896,9 +895,11 @@ Error MCP251863::initFilter(uint8_t fltNum, uint8_t fifoNum, uint16_t canSID, ui
         return Error::IdOutOfRange;
     }
 
-    uint16_t flt_addr      = to_underlying(RegisterAddress::REG_MCP_C1FLTCONx) + fltNum;
-    uint16_t flt_obj_addr  = to_underlying(RegisterAddress::REG_MCP_C1FLTOBJx) + 8 * fltNum;
-    uint16_t flt_mask_addr = to_underlying(RegisterAddress::REG_MCP_C1MASKx) + 8 * fltNum;
+    const uint16_t flt_addr = std::to_underlying(RegisterAddress::REG_MCP_C1FLTCONx) + fltNum;
+    const uint16_t flt_obj_addr =
+        std::to_underlying(RegisterAddress::REG_MCP_C1FLTOBJx) + 8 * fltNum;
+    const uint16_t flt_mask_addr =
+        std::to_underlying(RegisterAddress::REG_MCP_C1MASKx) + 8 * fltNum;
 
     uint8_t buff[4];
 
@@ -940,10 +941,10 @@ Error MCP251863::start_push_canfd(uint8_t fifoNum, uint32_t id, const uint8_t* d
     CanFdFrame frame{};
     frame.id  = id;
     frame.ide = extended_id;
-    frame.fdf = 1;
+    frame.fdf = true;
     frame.brs = brs;
     frame.len = len;
-    frame.dlc = to_underlying(*dlc_opt);
+    frame.dlc = std::to_underlying(*dlc_opt);
     for (size_t i = 0; i < len; i++) {
         frame.data[i] = data[i];
     }
@@ -959,10 +960,12 @@ Error MCP251863::start_push_frame(uint8_t fifoNum, const CanFdFrame& frame) {
     if (fifo_op_state != FifoOperationState::IDLE) {
         return Error::Busy;
     }
-    uint16_t fifo_stat_addr  = to_underlying(RegisterAddress::REG_MCP_C1FIFOSTAx) + 12 * fifoNum;
-    uint16_t fifo_point_addr = to_underlying(RegisterAddress::REG_MCP_C1FIFOUAx) + 12 * fifoNum;
-    user_fifo_addr           = to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * fifoNum;
-    uint8_t stat             = 0;
+    const uint16_t fifo_stat_addr =
+        std::to_underlying(RegisterAddress::REG_MCP_C1FIFOSTAx) + 12 * fifoNum;
+    const uint16_t fifo_point_addr =
+        std::to_underlying(RegisterAddress::REG_MCP_C1FIFOUAx) + 12 * fifoNum;
+    user_fifo_addr = std::to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * fifoNum;
+    uint8_t stat   = 0;
     MCP_TRY(readAddr(fifo_stat_addr, &stat, 1));
     if ((stat & 0b00000001) == 0) {
         stats.tx_fifo_full_events++;
@@ -995,7 +998,7 @@ Error MCP251863::poll_push() {
 
 Error MCP251863::request_send(uint8_t fifoNum) {
     MCP_TRY(checkFifo(fifoNum, true));
-    uint16_t addr = to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * fifoNum;
+    const uint16_t addr = std::to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * fifoNum;
     MCP_TRY(pollRegisterBit(addr + 1, 0b00000001, false, Error::PollTimeout));
     MCP_TRY(updateByte(addr + 1, 0x00, 0b00000010));  // TXREQ
     stats.frames_tx_requested++;
@@ -1018,13 +1021,15 @@ Error MCP251863::start_pop_canfd(uint8_t fifoNum) {
     if (fifo_op_state != FifoOperationState::IDLE) {
         return Error::Busy;
     }
-    user_fifo_addr           = to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * fifoNum;
-    uint16_t fifo_stat_addr  = to_underlying(RegisterAddress::REG_MCP_C1FIFOSTAx) + 12 * fifoNum;
-    uint16_t fifo_point_addr = to_underlying(RegisterAddress::REG_MCP_C1FIFOUAx) + 12 * fifoNum;
-    uint8_t buff             = 0;
-    uint16_t message_addr    = 0;
-    uint8_t header[12]       = {0};
-    size_t headerSize        = rxTimestampsEnabled_ ? 12 : 8;
+    user_fifo_addr = std::to_underlying(RegisterAddress::REG_MCP_C1FIFOCONx) + 12 * fifoNum;
+    const uint16_t fifo_stat_addr =
+        std::to_underlying(RegisterAddress::REG_MCP_C1FIFOSTAx) + 12 * fifoNum;
+    const uint16_t fifo_point_addr =
+        std::to_underlying(RegisterAddress::REG_MCP_C1FIFOUAx) + 12 * fifoNum;
+    uint8_t buff            = 0;
+    uint16_t message_addr   = 0;
+    uint8_t header[12]      = {0};
+    const size_t headerSize = rxTimestampsEnabled_ ? 12 : 8;
     MCP_TRY(readAddr(fifo_stat_addr, &buff, 1));
     if ((buff & 0b00000001) == 0) {
         return Error::RxFifoEmpty;
@@ -1040,7 +1045,7 @@ Error MCP251863::start_pop_canfd(uint8_t fifoNum) {
         }
         return err;
     }
-    user_frame.valid  = 1;
+    user_frame.valid  = true;
     pending_fifo_uinc = true;
     fifo_op_state     = FifoOperationState::POP_DONE;
     return Error::None;
@@ -1070,8 +1075,9 @@ Result<CanFdFrame> MCP251863::get_read_frame() {
 Result<FifoStatus> MCP251863::getFIFOStatus(uint8_t fifoNum) {
     FifoStatus status{};
 
-    uint16_t fifo_stat_addr = to_underlying(RegisterAddress::REG_MCP_C1FIFOSTAx) + 12 * fifoNum;
-    uint32_t reg            = 0;
+    const uint16_t fifo_stat_addr =
+        std::to_underlying(RegisterAddress::REG_MCP_C1FIFOSTAx) + 12 * fifoNum;
+    uint32_t reg = 0;
     MCP_TRY(readReg(fifo_stat_addr, &reg));
 
     status.fifo_num                = (reg >> 8) & 0x1F;
@@ -1091,21 +1097,22 @@ Error MCP251863::clearRxOverflow(uint8_t fifoNum) {
     MCP_TRY(checkFifo(fifoNum, false));
     // writing zero clears RXOVIF, the read-only flags in this byte ignore the write
     const uint8_t zero = 0;
-    return writeAddr(to_underlying(RegisterAddress::REG_MCP_C1FIFOSTAx) + 12 * fifoNum, &zero, 1);
+    return writeAddr(std::to_underlying(RegisterAddress::REG_MCP_C1FIFOSTAx) + 12 * fifoNum, &zero,
+                     1);
 }
 
 Result<Status> MCP251863::getStatus() {
     Status status{};
 
-    MCP_TRY(readReg(to_underlying(RegisterAddress::REG_MCP_C1INT), &status.interrupt_flags));
-    MCP_TRY(readReg(to_underlying(RegisterAddress::REG_MCP_C1RXIF), &status.rx_if));
-    MCP_TRY(readReg(to_underlying(RegisterAddress::REG_MCP_C1TXIF), &status.tx_if));
-    MCP_TRY(readReg(to_underlying(RegisterAddress::REG_MCP_C1RXOVIF), &status.rx_overflow_if));
-    MCP_TRY(readReg(to_underlying(RegisterAddress::REG_MCP_C1TXATIF), &status.tx_attempt_if));
-    MCP_TRY(readReg(to_underlying(RegisterAddress::REG_MCP_C1TREC), &status.trec));
-    MCP_TRY(readReg(to_underlying(RegisterAddress::REG_MCP_C1BDIAGx), &status.bdiag0));
-    MCP_TRY(readReg(to_underlying(RegisterAddress::REG_MCP_C1BDIAGx) + 4, &status.bdiag1));
-    MCP_TRY(readReg(to_underlying(RegisterAddress::REG_MCP_CRC), &status.crc));
+    MCP_TRY(readReg(std::to_underlying(RegisterAddress::REG_MCP_C1INT), &status.interrupt_flags));
+    MCP_TRY(readReg(std::to_underlying(RegisterAddress::REG_MCP_C1RXIF), &status.rx_if));
+    MCP_TRY(readReg(std::to_underlying(RegisterAddress::REG_MCP_C1TXIF), &status.tx_if));
+    MCP_TRY(readReg(std::to_underlying(RegisterAddress::REG_MCP_C1RXOVIF), &status.rx_overflow_if));
+    MCP_TRY(readReg(std::to_underlying(RegisterAddress::REG_MCP_C1TXATIF), &status.tx_attempt_if));
+    MCP_TRY(readReg(std::to_underlying(RegisterAddress::REG_MCP_C1TREC), &status.trec));
+    MCP_TRY(readReg(std::to_underlying(RegisterAddress::REG_MCP_C1BDIAGx), &status.bdiag0));
+    MCP_TRY(readReg(std::to_underlying(RegisterAddress::REG_MCP_C1BDIAGx) + 4, &status.bdiag1));
+    MCP_TRY(readReg(std::to_underlying(RegisterAddress::REG_MCP_CRC), &status.crc));
 
     status.bus_off          = (status.trec & (1UL << 21)) != 0;
     status.tx_error_passive = (status.trec & (1UL << 20)) != 0;
@@ -1120,22 +1127,23 @@ Result<Status> MCP251863::getStatus() {
 }
 
 Error MCP251863::setControllerMode(ControllerMode contMode) {
-    const uint16_t addr = to_underlying(RegisterAddress::REG_MCP_C1CON);
+    const uint16_t addr = std::to_underlying(RegisterAddress::REG_MCP_C1CON);
     uint8_t current     = 0;
     MCP_TRY(readOpMode(&current));
-    if (current != to_underlying(ControllerMode::CMODE_MCP_CONF)) {
-        MCP_TRY(updateByte(addr + 3, 0b00000111, to_underlying(ControllerMode::CMODE_MCP_CONF)));
+    if (current != std::to_underlying(ControllerMode::CMODE_MCP_CONF)) {
+        MCP_TRY(
+            updateByte(addr + 3, 0b00000111, std::to_underlying(ControllerMode::CMODE_MCP_CONF)));
         MCP_TRY(waitForOpMode(ControllerMode::CMODE_MCP_CONF, 1000, 100));
     }
-    return updateByte(addr + 3, 0b00000111, to_underlying(contMode));
+    return updateByte(addr + 3, 0b00000111, std::to_underlying(contMode));
 }
 
-Error MCP251863::setTransceiverMode(TransceiverMode mode) {
-    gpio_put(standbyPin_, to_underlying(mode));
+Error MCP251863::setTransceiverMode(TransceiverMode mode) const {
+    gpio_put(standbyPin_, std::to_underlying(mode));
     return Error::None;
 }
 
-Error MCP251863::setInterrupts(InterruptEnable* intEnArray, size_t intEnSize) {
+Error MCP251863::setInterrupts(const InterruptEnable* intEnArray, size_t intEnSize) {
     if (intEnSize > 32) {
         return Error::InvalidArgument;
     }
@@ -1146,10 +1154,10 @@ Error MCP251863::setInterrupts(InterruptEnable* intEnArray, size_t intEnSize) {
     for (size_t i = 0; i < intEnSize; i++) {
         message |= static_cast<uint32_t>(intEnArray[i]);
     }
-    return writeReg(to_underlying(RegisterAddress::REG_MCP_C1INT), message);
+    return writeReg(std::to_underlying(RegisterAddress::REG_MCP_C1INT), message);
 }
 
-void MCP251863::gpioIrqHandler(uint gpio, uint32_t events) {
+void MCP251863::gpioIrqHandler(uint gpio, uint32_t /*events*/) {
     if (gpio == instance_->intPin_) {
         instance_->error_flag_pending = true;
     } else if (gpio == instance_->int0Pin_) {
@@ -1160,7 +1168,7 @@ void MCP251863::gpioIrqHandler(uint gpio, uint32_t events) {
 }
 
 // system error, CAN bus error
-Error MCP251863::enableErrorInterrupts() {
+Error MCP251863::enableErrorInterrupts() const {
     gpio_init(intPin_);
     gpio_set_dir(intPin_, GPIO_IN);
     gpio_pull_up(intPin_);
@@ -1171,7 +1179,7 @@ Error MCP251863::enableErrorInterrupts() {
 
 // TXAT, Not Full
 Error MCP251863::enableTxInterrupts() {
-    MCP_TRY(setPinMode(IO_MCP_INT0, IOMODE_MCP_INT));
+    MCP_TRY(setPinMode(IoPin::IO_MCP_INT0, IoMode::IOMODE_MCP_INT));
     gpio_init(int0Pin_);
     gpio_set_dir(int0Pin_, GPIO_IN);
     gpio_pull_up(int0Pin_);
@@ -1182,7 +1190,7 @@ Error MCP251863::enableTxInterrupts() {
 
 // Overflow event, not empty
 Error MCP251863::enableRxInterrupts() {
-    MCP_TRY(setPinMode(IO_MCP_INT1, IOMODE_MCP_INT));
+    MCP_TRY(setPinMode(IoPin::IO_MCP_INT1, IoMode::IOMODE_MCP_INT));
     gpio_init(int1Pin_);
     gpio_set_dir(int1Pin_, GPIO_IN);
     gpio_pull_up(int1Pin_);
@@ -1193,7 +1201,7 @@ Error MCP251863::enableRxInterrupts() {
 
 Error MCP251863::setPinMode(IoPin pin, IoMode mode) {
     uint8_t buff[4] = {0};
-    MCP_TRY(readAddr(to_underlying(RegisterAddress::REG_MCP_IOCON), buff, 4));
+    MCP_TRY(readAddr(std::to_underlying(RegisterAddress::REG_MCP_IOCON), buff, 4));
     if (pin == IoPin::IO_MCP_INT0) {
         switch (mode) {
             case IoMode::IOMODE_MCP_GPIO_IN:
@@ -1223,7 +1231,7 @@ Error MCP251863::setPinMode(IoPin pin, IoMode mode) {
     } else {
         return Error::InvalidArgument;
     }
-    return writeAddr(to_underlying(RegisterAddress::REG_MCP_IOCON), buff, 4);
+    return writeAddr(std::to_underlying(RegisterAddress::REG_MCP_IOCON), buff, 4);
 }
 
 // C1VEC layout
@@ -1234,26 +1242,26 @@ Error MCP251863::setPinMode(IoPin pin, IoMode mode) {
 
 Result<int> MCP251863::getTXCode() {
     uint8_t buff = 0;
-    MCP_TRY(readAddr(to_underlying(RegisterAddress::REG_MCP_C1VEC) + 2, &buff, 1));
+    MCP_TRY(readAddr(std::to_underlying(RegisterAddress::REG_MCP_C1VEC) + 2, &buff, 1));
     return static_cast<int>(buff & 0x7F);
 }
 
 Result<int> MCP251863::getRXCode() {
     uint8_t buff = 0;
-    MCP_TRY(readAddr(to_underlying(RegisterAddress::REG_MCP_C1VEC) + 3, &buff, 1));
+    MCP_TRY(readAddr(std::to_underlying(RegisterAddress::REG_MCP_C1VEC) + 3, &buff, 1));
     return static_cast<int>(buff & 0x7F);
 }
 
 Result<int> MCP251863::getFLTCode() {
     // its 5 bits so we mask with 0x1F instead of 0x7F
     uint8_t buff = 0;
-    MCP_TRY(readAddr(to_underlying(RegisterAddress::REG_MCP_C1VEC) + 1, &buff, 1));
+    MCP_TRY(readAddr(std::to_underlying(RegisterAddress::REG_MCP_C1VEC) + 1, &buff, 1));
     return static_cast<int>(buff & 0x1F);
 }
 
 Result<int> MCP251863::getICode() {
     uint8_t buff = 0;
-    MCP_TRY(readAddr(to_underlying(RegisterAddress::REG_MCP_C1VEC), &buff, 1));
+    MCP_TRY(readAddr(std::to_underlying(RegisterAddress::REG_MCP_C1VEC), &buff, 1));
     buff &= 0x7F;
     if (buff > 0b1001010) {  // max valid ICODE value
         return Error::BadRegisterValue;
