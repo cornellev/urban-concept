@@ -45,8 +45,8 @@ jobs:
           nix develop --command just cev-lib chuds vcan-up
 
       # fail instead of skipping if vcan0 is missing
-      - name: test chuds
-        run: nix develop --command just cev-lib chuds test
+      - name: test
+        run: nix develop --command just test
         env:
           CHUDS_REQUIRE_CAN: 1
 
@@ -77,5 +77,4 @@ jobs:
       - name: lint
         run: |
           echo "::add-matcher::.github/clang-tidy.json"
-          nix develop --command just elec lint
-          nix develop --command just cev-lib chuds lint
+          nix develop --command just lint
