@@ -1,0 +1,5 @@
+---
+InheritParentConfig: true
+CheckOptions:
+  # zenoh.hxx should be ignored
+  misc-include-cleaner.IgnoreHeaders: "pico/.*;hardware/.*;zenoh.*"
