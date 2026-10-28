@@ -1,0 +1,5 @@
+---
+# doctest's REQUIRE guards optional access in a way the analyzer can't see
+InheritParentConfig: true
+Checks: >
+  -bugprone-unchecked-optional-access
