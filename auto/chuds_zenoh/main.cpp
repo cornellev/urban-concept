@@ -2,6 +2,7 @@
 #include <chrono>
 #include <csignal>
 #include <cstdio>
+#include <exception>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -55,27 +56,17 @@ void on_message(const zenoh::Session& session, const chuds::Message& m) {
     if (m.cls != chuds::MsgClass::Telemetry || m.subaddress != chuds::merceves::kNodeId) {
         return;
     }
-    const auto t = chuds::body_as<chuds::merceves::Telemetry>(m);
-    if (!t) {
+    const auto b = chuds::body_as<chuds::merceves::Telemetry>(m);
+    if (!b) {
         return;
     }
-    auto out = chuds_zenoh::telemetry_payloads(*t);
+    auto out = chuds_zenoh::telemetry_payloads(*b);
     publish(session, kLeftRpmKey, std::move(out.left_rpm));
     publish(session, kRightRpmKey, std::move(out.right_rpm));
     publish(session, kSteeringAngleKey, std::move(out.steering_angle));
 }
 
-}  // namespace
-
-int main(int argc, char** argv) {
-    std::string_view ifname = "can0";
-    if (argc == 3 && std::string_view{argv[1]} == "-i") {
-        ifname = argv[2];
-    } else if (argc != 1) {
-        std::fprintf(stderr, "usage: %s [-i iface]\niface defaults to can0\n", argv[0]);
-        return 2;
-    }
-
+int run(std::string_view ifname) {
     Bus bus;
     if (!bus.open(ifname)) {
         std::fprintf(stderr, "failed to open %.*s\n", static_cast<int>(ifname.size()),
@@ -117,4 +108,23 @@ int main(int argc, char** argv) {
         }
     }
     return 0;
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+    std::string_view ifname = "can0";
+    if (argc == 3 && std::string_view{argv[1]} == "-i") {
+        ifname = argv[2];
+    } else if (argc != 1) {
+        std::fprintf(stderr, "usage: %s [-i iface]\niface defaults to can0\n", argv[0]);
+        return 2;
+    }
+    // zenoh-cpp throws ZException from any call made without a ZResult*
+    try {
+        return run(ifname);
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "%s\n", e.what());
+        return 1;
+    }
 }
