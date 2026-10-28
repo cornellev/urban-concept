@@ -1,7 +1,9 @@
-set default-list
-
 # use powershell on windows
 set windows-shell := ["powershell.exe", "-NoProfile", "-Command"]
+
+[private]
+default:
+    @just --list
 
 configure:
     cmake -S . -B build -G Ninja
