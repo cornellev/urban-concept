@@ -16,4 +16,13 @@ default:
 # build and test like ci (telem/shm needs a pi, excluded)
 check:
     just elec build
+    just test
+
+# test every module
+test:
     just cev-lib chuds test
+
+# lint every module
+lint:
+    just elec lint
+    just cev-lib chuds lint
