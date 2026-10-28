@@ -130,7 +130,9 @@ Things the code doesn't say:
 
 - When `recv()` has no message, `rx.error()` says why. `Empty` just means nothing is waiting.
   `chuds::is_fault()` is true only for real problems such as bus-off.
-- `body_as<T>` checks only the body size, so match the class and subaddress first.
+- `catalog_body<T>(m)` reads a catalog body only when `m` has that body's `kClass` and one of its
+  addresses, and for a command only when it is an `Update`. `body_as<T>` checks only the body
+  size, so read messages with `catalog_body<T>`.
 - On the VCU, `bus.open("can0")` connects the transport and `bus.wait(timeout)` blocks until a
   frame arrives. Boards have neither: a board that takes commands polls the chip each loop pass.
 - A periodic `send()` may ignore its result, since the next send replaces a lost one. A one-shot
@@ -145,7 +147,7 @@ Things the code doesn't say:
 | ------------------------- | ------------------------------------------------------------- |
 | `chuds.hpp`               | includes everything below except the two transports           |
 | `bus.hpp`                 | `Bus<T>`: send, recv, and the controller's status             |
-| `catalog.hpp`             | the car's node ids and message bodies                         |
+| `catalog.hpp`             | the car's node ids and message bodies, `catalog_body<T>`      |
 | `catalog_format.hpp`      | `format_message`, `print_message`                             |
 | `message.hpp`             | `Message`, `encode`/`decode`, `make_message<T>`, `body_as<T>` |
 | `transport.hpp`           | the `Transport` concept, errors, `is_fault()`, `BusStatus`    |

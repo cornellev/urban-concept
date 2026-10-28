@@ -50,6 +50,22 @@ class Bus {
         return send(*m);
     }
 
+    // send a catalog body to its one address as an Update
+    template <SingleAddressBody Body>
+    TxResult send(const Body& body) {
+        return send(Body::kClass, Body::kSubaddress, MsgType::Update, body);
+    }
+
+    // send a catalog body to one of its addresses as an Update
+    // Error if subaddress is not one of them
+    template <MultiAddressBody Body>
+    TxResult send(std::uint8_t subaddress, const Body& body) {
+        if (!is_address_of<Body>(subaddress)) {
+            return std::unexpected(TxError::Error);
+        }
+        return send(Body::kClass, subaddress, MsgType::Update, body);
+    }
+
     // the next message, or why there is none
     // Empty means nothing is waiting and is not a fault
     [[nodiscard]] RecvResult recv() {

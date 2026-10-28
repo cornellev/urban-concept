@@ -178,10 +178,9 @@ int main() {
                 stopped = true;
                 body    = 0;
                 apply(body, wiper);
-            } else if (!stopped && m.cls == chuds::MsgClass::Command &&
-                       m.subaddress == chuds::kBodyStateId && m.type == chuds::MsgType::Update) {
-                if (auto s = chuds::body_as<chuds::BodyState>(m)) {
-                    body = s->bits;
+            } else if (!stopped) {
+                if (const auto b = chuds::catalog_body<chuds::BodyState>(m)) {
+                    body = b->bits;
                     apply(body, wiper);
                     command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
                 }
@@ -207,8 +206,7 @@ int main() {
         if (pub.due()) {
             const cev::RpmCounts rpm = cev::rpm_take();
             adc_select_input(kBrakeChannel);
-            bus.send(chuds::MsgClass::Telemetry, kNodeId, chuds::MsgType::Update,
-                     Telemetry{rpm.left, rpm.right, adc_read()});
+            bus.send(Telemetry{rpm.left, rpm.right, adc_read()});
         }
     }
 }

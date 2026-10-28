@@ -38,6 +38,14 @@ TEST_CASE("format_message prints a status blink command with its target node") {
     CHECK(std::string_view(line.data()) == "status blink 250 ms to 0x20");
 }
 
+TEST_CASE("format_message does not print a status blink to a node that does not take it") {
+    const auto m = make_message(MsgClass::Command, 0x42, MsgType::Update, StatusBlink{250});
+    REQUIRE(m.has_value());
+    std::array<char, 96> line{};
+    format_message(*m, line);
+    CHECK(std::string_view(line.data()) == "class 1 subaddress 0x42 type 0, 2 body bytes");
+}
+
 TEST_CASE("format_message falls back to the header for a message outside the catalog") {
     const Message m{
         .cls        = MsgClass::Command,

@@ -16,14 +16,14 @@ struct RxLog {
 
     void log(const chuds::Message& m) {
         const bool body_state =
-            m.cls == chuds::MsgClass::Command && m.subaddress == chuds::kBodyStateId;
+            m.cls == chuds::BodyState::kClass && m.subaddress == chuds::BodyState::kSubaddress;
         const bool to_me = m.cls == chuds::MsgClass::Command && m.subaddress == node;
         if (!body_state && !to_me && m.cls != chuds::MsgClass::Emergency) {
             return;
         }
         if (body_state) {
-            if (const auto s = chuds::body_as<chuds::BodyState>(m)) {
-                const int bits = s->bits & ~chuds::BodyState::kBlinkPhase;
+            if (const auto b = chuds::body_as<chuds::BodyState>(m)) {
+                const int bits = b->bits & ~chuds::BodyState::kBlinkPhase;
                 if (bits == last_body) {
                     return;
                 }

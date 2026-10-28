@@ -56,3 +56,6 @@ themselves.
 2. Order fields so there is no padding, then `static_assert(sizeof(T) == N)`.
 3. Add `static constexpr bool is_chuds_wire_body = true;` inside the struct. It is `static`, so it
    takes up no bytes.
+4. Add `static constexpr MsgClass kClass` and either `static constexpr std::uint8_t kSubaddress`
+   for one address or a `kSubaddresses` array for several, so receivers read it with
+   `catalog_body<T>(m)`.
