@@ -149,6 +149,8 @@ node sends and drives is in [`cev-lib/chuds/README.md`](../cev-lib/chuds/README.
 - `front_aux`: FAux_V1.1. Status LED on GPIO25.
 - `back_aux`: BAux_V1.1. Status LED on GPIO25.
 - `joulemeter`: Joulemeter_V1.4. Status LED on GPIO25.
+- `pio_test`: no PCB, checks `common/rpm.pio` on any RP2040. Jumper GPIO14 to GPIO15, and it
+  prints `OK` or `FAIL` on USB serial for each round of pulses.
 - `template-project`: no PCB, the starting point for a new board.
 
 ### CAN connector and power
