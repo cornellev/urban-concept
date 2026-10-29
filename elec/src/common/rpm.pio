@@ -1,0 +1,18 @@
+; counts rising edges
+; x counts down once per edge, and each loop iteration pushes it to the rx fifo
+; to read: drain fifo, then take one word
+.program rpm_edge_counter
+
+.wrap_target              ; start loop
+wait_low:                 ; while high, wait for fall
+    MOV isr, x            ; isr = x
+    PUSH noblock          ; drop if full
+    JMP pin wait_low      ; if still high, keep waiting
+wait_high:                ; while low, wait for rise
+    MOV isr, x            ; isr = x
+    PUSH noblock          ; drop if full
+    JMP pin rising        ; rising
+    JMP wait_high         ; still low, keep waiting
+rising:                   ; no increment in pio, so count down and cpu negates
+    JMP x-- wait_low      ; x--, wait for fall
+.wrap
