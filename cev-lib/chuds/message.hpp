@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -150,6 +151,45 @@ template <class T>
     std::copy_n(m.body.begin(), sizeof(T), bytes.begin());
 
     return std::bit_cast<T>(bytes);
+}
+
+// a body always sent with kClass to its one kSubaddress
+template <class B>
+concept SingleAddressBody = requires {
+    { B::kClass } -> std::convertible_to<MsgClass>;
+    { B::kSubaddress } -> std::convertible_to<std::uint8_t>;
+};
+
+// a body sent with kClass to any one of its kSubaddresses
+template <class B>
+concept MultiAddressBody = requires {
+    { B::kClass } -> std::convertible_to<MsgClass>;
+    std::ranges::find(B::kSubaddresses, std::uint8_t{});
+};
+
+// a body whose class and addresses are part of its type, see catalog.hpp
+template <class B>
+concept CatalogBody = SingleAddressBody<B> || MultiAddressBody<B>;
+
+// whether subaddress is one of B's addresses
+template <CatalogBody B>
+[[nodiscard]] constexpr bool is_address_of(std::uint8_t subaddress) {
+    if constexpr (SingleAddressBody<B>) {
+        return subaddress == B::kSubaddress;
+    } else {
+        return std::ranges::find(B::kSubaddresses, subaddress) != B::kSubaddresses.end();
+    }
+}
+
+// m's body as B when m is sent to one of B's addresses
+// a command counts only as an Update, since boards act on nothing else
+template <CatalogBody B>
+[[nodiscard]] constexpr std::optional<B> catalog_body(const Message& m) {
+    if (m.cls != B::kClass || !is_address_of<B>(m.subaddress) ||
+        (B::kClass == MsgClass::Command && m.type != MsgType::Update)) {
+        return std::nullopt;
+    }
+    return body_as<B>(m);
 }
 
 // make a STOP message

@@ -115,7 +115,7 @@ int main() {
                               static_cast<float>(i_sum / period_s),
                               static_cast<float>((joules - report_joules) / period_s),
                               static_cast<float>(joules)};
-            bus.send(chuds::MsgClass::Telemetry, kNodeId, chuds::MsgType::Update, t);
+            bus.send(t);
             std::printf("v=%.2f V  i=%.2f A  p=%.1f W  e=%.1f J\n", t.voltage, t.current, t.power,
                         joules);
             report_joules = joules;

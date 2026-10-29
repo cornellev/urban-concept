@@ -1,6 +1,9 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
+
+#include "chuds/ids.hpp"
 
 namespace chuds {
 
@@ -10,6 +13,9 @@ constexpr std::uint8_t kBodyStateId = 0x08;
 // desired state of the car's body outputs, broadcast by the leader
 // resent on change and periodically, each node drives only the outputs it has
 struct BodyState {
+    static constexpr MsgClass kClass          = MsgClass::Command;
+    static constexpr std::uint8_t kSubaddress = kBodyStateId;
+
     // bits 6-7 are reserved and sent as 0
     static constexpr std::uint8_t kLeftTurn   = 1 << 0;
     static constexpr std::uint8_t kRightTurn  = 1 << 1;
@@ -24,14 +30,6 @@ struct BodyState {
 };
 static_assert(sizeof(BodyState) == 1);
 
-// command body sent to one node, sets its status LED's blink half-period
-// front_aux, back_aux, joulemeter, and devboard take it, and ignore 0
-struct StatusBlink {
-    std::uint16_t half_period_ms{};
-    static constexpr bool is_chuds_wire_body = true;
-};
-static_assert(sizeof(StatusBlink) == 2);
-
 }  // namespace chuds
 
 namespace chuds::front_aux {
@@ -41,6 +39,9 @@ constexpr std::uint8_t kNodeId = 0x10;
 
 // telemetry body, published once per cycle
 struct Telemetry {
+    static constexpr MsgClass kClass          = MsgClass::Telemetry;
+    static constexpr std::uint8_t kSubaddress = kNodeId;
+
     std::uint16_t rpm_left{};   // wheel edges in the last window
     std::uint16_t rpm_right{};  // wheel edges in the last window
     std::uint16_t steering{};   // raw adc, 0-4095
@@ -57,6 +58,9 @@ constexpr std::uint8_t kNodeId = 0x20;
 
 // telemetry body, published once per cycle
 struct Telemetry {
+    static constexpr MsgClass kClass          = MsgClass::Telemetry;
+    static constexpr std::uint8_t kSubaddress = kNodeId;
+
     std::uint16_t rpm_left{};   // wheel edges in the last window
     std::uint16_t rpm_right{};  // wheel edges in the last window
     std::uint16_t brake{};      // raw adc, 0-4095
@@ -73,6 +77,9 @@ constexpr std::uint8_t kNodeId = 0x30;
 
 // telemetry body, published every report period
 struct Telemetry {
+    static constexpr MsgClass kClass          = MsgClass::Telemetry;
+    static constexpr std::uint8_t kSubaddress = kNodeId;
+
     float voltage{};  // bus volts, averaged over the report period
     float current{};  // bus amps, averaged over the report period
     float power{};    // watts, averaged over the report period
@@ -89,3 +96,20 @@ namespace chuds::devboard {
 constexpr std::uint8_t kNodeId = 0x40;
 
 }  // namespace chuds::devboard
+
+namespace chuds {
+
+// command body sent to one node, sets its status LED's blink half-period
+// nodes ignore 0
+struct StatusBlink {
+    static constexpr MsgClass kClass = MsgClass::Command;
+    // every node that takes it
+    static constexpr std::array<std::uint8_t, 4> kSubaddresses{
+        front_aux::kNodeId, back_aux::kNodeId, joulemeter::kNodeId, devboard::kNodeId};
+
+    std::uint16_t half_period_ms{};
+    static constexpr bool is_chuds_wire_body = true;
+};
+static_assert(sizeof(StatusBlink) == 2);
+
+}  // namespace chuds

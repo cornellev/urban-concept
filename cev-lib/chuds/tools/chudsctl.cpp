@@ -133,8 +133,7 @@ int run_body(Bus& bus, int argc, char** argv, int first) {
         if (now >= next_send) {
             const auto out =
                 static_cast<std::uint8_t>(blink_on ? bits | BodyState::kBlinkPhase : bits);
-            const auto st = bus.send(chuds::MsgClass::Command, chuds::kBodyStateId,
-                                     chuds::MsgType::Update, BodyState{out});
+            const auto st = bus.send(BodyState{out});
             if (!st) {
                 std::fprintf(stderr, "send failed: %d\n", std::to_underlying(st.error()));
             }
@@ -168,8 +167,7 @@ int run_blink(Bus& bus, std::string_view node_name, std::string_view arg) {
     }
     bool ok = true;
     for (const NamedValue& node : nodes) {
-        const auto st = bus.send(chuds::MsgClass::Command, node.value, chuds::MsgType::Update,
-                                 chuds::StatusBlink{ms});
+        const auto st = bus.send(node.value, chuds::StatusBlink{ms});
         report("status blink", st);
         ok = ok && st;
     }

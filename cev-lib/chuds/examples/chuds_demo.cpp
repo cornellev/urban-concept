@@ -101,8 +101,7 @@ int run_live(chuds::Bus<chuds::SocketCanTransport>& bus) {
             const auto out =
                 static_cast<std::uint8_t>(blink_on ? bits | BodyState::kBlinkPhase : bits);
             const BodyState state{out};
-            (void)bus.send(chuds::MsgClass::Command, chuds::kBodyStateId, chuds::MsgType::Update,
-                           state);
+            (void)bus.send(state);
             next_send = now + kBodyResend;
         }
 
@@ -128,8 +127,7 @@ int run_live(chuds::Bus<chuds::SocketCanTransport>& bus) {
 // send a body state with headlights on
 int run_send(chuds::Bus<chuds::SocketCanTransport>& bus) {
     const chuds::BodyState state{chuds::BodyState::kHeadlights};
-    const auto st =
-        bus.send(chuds::MsgClass::Command, chuds::kBodyStateId, chuds::MsgType::Update, state);
+    const auto st = bus.send(state);
     if (!st) {
         std::fprintf(stderr, "send failed: %d\n", std::to_underlying(st.error()));
         return 1;
