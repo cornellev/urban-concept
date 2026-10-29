@@ -13,8 +13,6 @@
 #include "hardware/spi.h"
 #include "pico/stdlib.h"
 
-// implementation of C++23 std::to_underlying
-
 // Constants and magic numbers
 const uint MCP251863_BAUD_RATE = 16000000;
 const uint MAX_TRANSFER        = 80;  // 2 cmd + 8 header + 4 opt. rx timestamp + 64 payload + 2 crc
@@ -22,6 +20,8 @@ const uint MCP251863_MAX_PAYLOAD = 64;
 
 const uint MCP251863_CLOCK_HZ = 40000000;
 
+// each category starts on its own 0x10 block, and the rest count up from there
+// NOLINTNEXTLINE(readability-enum-initial-value)
 enum class Error : uint8_t {
     None = 0x00,
 
@@ -136,20 +136,14 @@ constexpr const char* errorToString(Error e) {
 template <typename T>
 class Result {
    public:
-    Result(const T& value) {
-        value_ = value;
-        error_ = Error::None;
-    }
-    Result(Error error) {
-        value_ = T();
-        error_ = error;
-    }
+    Result(const T& value) : value_(value), error_(Error::None) {}
+    Result(Error error) : value_(T()), error_(error) {}
 
-    bool ok() const { return error_ == Error::None; }
+    [[nodiscard]] bool ok() const { return error_ == Error::None; }
     explicit operator bool() const { return ok(); }
-    Error error() const { return error_; }
-    const T& value() const { return value_; }
-    T& value() { return value_; }
+    [[nodiscard]] Error error() const { return error_; }
+    [[nodiscard]] const T& value() const { return value_; }
+    [[nodiscard]] T& value() { return value_; }
 
    private:
     T value_;
@@ -192,7 +186,7 @@ enum class TxRetransmitMode : uint8_t {
     TXRET_MCP_UNLIM = 0b10
 };
 
-enum FifoInterruptFlag : uint8_t {
+enum class FifoInterruptFlag : uint8_t {
     FIFO_INT_MCP_NFNE  = 0b00000001,  // fifo not full (TX), fifo not empty (RX)
     FIFO_INT_MCP_HFHE_ = 0b00000010,  // fifo half full(TX), fifo half empty (RX)
     FIFO_INT_MCP_FFEE  = 0b00000100,  // fifo full (TX), fifo empty (RX),
@@ -268,7 +262,7 @@ enum class FifoPayloadSize : uint8_t {
     FIFO_PLSIZE_64 = 0b111
 };
 
-enum InterruptEnable : uint32_t {
+enum class InterruptEnable : uint32_t {
     INT_EN_MCP_TXIF     = 0b00000000000000000000000000000001,
     INT_EN_MCP_RXIF     = 0b00000000000000000000000000000010,
     INT_EN_MCP_TBCIF    = 0b00000000000000000000000000000100,
@@ -297,13 +291,18 @@ enum InterruptEnable : uint32_t {
     INT_EN_MCP_IVMIE    = 0b10000000000000000000000000000000
 };
 
-enum IoPin { IO_MCP_INT0 = 0, IO_MCP_INT1 = 1 };
+enum class IoPin : uint8_t { IO_MCP_INT0 = 0, IO_MCP_INT1 = 1 };
 
-enum IoMode { IOMODE_MCP_INT = 0, IOMODE_MCP_GPIO_OUT = 1, IOMODE_MCP_GPIO_IN = 2 };
+enum class IoMode : uint8_t { IOMODE_MCP_INT = 0, IOMODE_MCP_GPIO_OUT = 1, IOMODE_MCP_GPIO_IN = 2 };
 
-enum MessageType { CAN_BASE_MCP = 0, CAN_FD_BASE_MCP = 1, CAN_EXT = 2, CAN_FD_EXT = 3 };
+enum class MessageType : uint8_t {
+    CAN_BASE_MCP    = 0,
+    CAN_FD_BASE_MCP = 1,
+    CAN_EXT         = 2,
+    CAN_FD_EXT      = 3
+};
 
-enum class FifoOperationState { IDLE, PUSHING, POPPING, POP_DONE, PUSH_DONE };
+enum class FifoOperationState : uint8_t { IDLE, PUSHING, POPPING, POP_DONE, PUSH_DONE };
 
 // Structs
 
@@ -317,7 +316,7 @@ struct BitTiming {
 struct FifoInfo {
     bool configured = false;
     bool isTx       = false;
-    uint8_t rxFltNum;  // only for RX FIFOs
+    uint8_t rxFltNum{};  // only for RX FIFOs
 };
 
 struct CanFdFrame {
@@ -418,20 +417,19 @@ class MCP251863 {
 
     bool dmaInitialized = false;
 
-    int dma_tx_chan;
-    int dma_rx_chan;
+    int dma_tx_chan{};
+    int dma_rx_chan{};
 
-    dma_channel_config dma_tx_cfg;
-    dma_channel_config dma_rx_cfg;
+    dma_channel_config dma_tx_cfg{};
+    dma_channel_config dma_rx_cfg{};
 
-    uint8_t tx_buff[MAX_TRANSFER];
-    uint8_t rx_buff[MAX_TRANSFER];
+    uint8_t tx_buff[MAX_TRANSFER]{};
+    uint8_t rx_buff[MAX_TRANSFER]{};
     uint8_t* user_rx_buff   = nullptr;
     uint16_t user_fifo_addr = 0;
     CanFdFrame user_frame{};
 
-    size_t transfer_len;
-    bool transferBusy;
+    size_t transfer_len{};
 
     volatile FifoOperationState fifo_op_state = FifoOperationState::IDLE;
     volatile bool pending_fifo_uinc           = false;
@@ -443,9 +441,9 @@ class MCP251863 {
     uint chipSelectPin_;
     uint standbyPin_;
     uint intPin_, int0Pin_, int1Pin_;
-    WriteMode writeMode_;
-    ReadMode readMode_;
-    bool rxTimestampsEnabled_;
+    WriteMode writeMode_      = WriteMode::WM_MCP_NORM;
+    ReadMode readMode_        = ReadMode::RM_MCP_NORM;
+    bool rxTimestampsEnabled_ = false;
 
     // store config info so it can be retrieved
     // during recoveries
@@ -464,8 +462,8 @@ class MCP251863 {
     void spiTransferDMA(size_t len);
     void finishTransfer();
 
-    void csSelect();
-    void csDeselect();
+    void csSelect() const;
+    void csDeselect() const;
 
     // Asynchronous SPI read/write transactions w/ DMA
     Error dmaReadAddr(uint16_t startAddr, uint8_t* dst, size_t len);
@@ -480,7 +478,7 @@ class MCP251863 {
     Error pollRegisterBit(uint16_t addr, uint8_t mask, bool wantSet, int maxIters, uint32_t delayUs,
                           Error timeoutType);
     Error updateByte(uint16_t addr, uint8_t field, uint8_t value);
-    Error checkFifo(uint8_t fifoNum, bool wantTx) const;
+    [[nodiscard]] Error checkFifo(uint8_t fifoNum, bool wantTx) const;
     Error readFifoUserAddress(uint16_t fifoPointAddr, size_t objectSize, uint16_t* messageAddr);
     Error serviceFifoUinc();
 
@@ -488,19 +486,20 @@ class MCP251863 {
 
     Error initGeneralPurposeFifo(uint8_t fifoNum, FifoMode fifoMode, FifoPayloadSize plSize,
                                  uint8_t fSize, uint8_t prioNum, TxRetransmitMode retranMode,
-                                 FifoInterruptFlag* intFlagArray, size_t intFlagSize);
+                                 const FifoInterruptFlag* intFlagArray, size_t intFlagSize);
 
-    Error initTransmitEventFifo(uint8_t fSize, FifoInterruptFlag* intFlagArray, size_t intFlagSize);
+    Error initTransmitEventFifo(uint8_t fSize, const FifoInterruptFlag* intFlagArray,
+                                size_t intFlagSize);
     Error initTransmitQueue(FifoPayloadSize plSize, uint8_t fSize, uint8_t prioNum,
-                            TxRetransmitMode retranMode, FifoInterruptFlag* intFlagArray,
+                            TxRetransmitMode retranMode, const FifoInterruptFlag* intFlagArray,
                             size_t intFlagSize);
 
     // route one standard-ID filter to a FIFO and enable it
-    Error initFilter(uint8_t filNum, uint8_t fifoNum, uint16_t canSID, uint16_t sidMask);
+    Error initFilter(uint8_t fltNum, uint8_t fifoNum, uint16_t canSID, uint16_t sidMask);
 
     Error setControllerMode(ControllerMode mode);
-    Error setTransceiverMode(TransceiverMode mode);
-    Error setInterrupts(InterruptEnable* intEnArray, size_t intEnSize);
+    [[nodiscard]] Error setTransceiverMode(TransceiverMode mode) const;
+    Error setInterrupts(const InterruptEnable* intEnArray, size_t intEnSize);
 
    public:
     Error readOpMode(uint8_t* opmod);
@@ -520,13 +519,13 @@ class MCP251863 {
     // (already initialized to default values by init())
     Error setBitTiming(BitTiming nominalTiming, BitTiming dataTiming);
 
-    Error enableErrorInterrupts();
+    [[nodiscard]] Error enableErrorInterrupts() const;
     Error enableTxInterrupts();
     Error enableRxInterrupts();
 
-    bool errorInterruptPending() const { return error_flag_pending; }
-    bool rxInterruptPending() const { return rx_flag_pending; }
-    bool txInterruptPending() const { return tx_flag_pending; }
+    [[nodiscard]] bool errorInterruptPending() const { return error_flag_pending; }
+    [[nodiscard]] bool rxInterruptPending() const { return rx_flag_pending; }
+    [[nodiscard]] bool txInterruptPending() const { return tx_flag_pending; }
 
     void clearErrorInterruptPending() { error_flag_pending = false; }
     void clearRxInterruptPending() { rx_flag_pending = false; }
@@ -602,7 +601,7 @@ class MCP251863 {
 
     // read driver stats; counts accumulate over time
     // could be useful for analyzing long-term driver behavior?
-    DriverStats getStats() const { return stats; }
+    [[nodiscard]] DriverStats getStats() const { return stats; }
     // reset driver stats
     void resetStats() { stats = DriverStats{}; }
 

@@ -39,4 +39,8 @@ install-can: build
 # lint every file the build compiles, except fetched and generated code
 [unix]
 lint: configure
-    run-clang-tidy -p build -quiet '^((?!/build/).)*$'
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # run-clang-tidy prints each file's full command and a "N warnings generated" tally; drop both
+    run-clang-tidy -p build -quiet '^((?!/build/).)*$' 2>&1 \
+        | { grep -vE '^\[[0-9]+/[0-9]+\]\[|[0-9]+ warnings generated\.$' || true; } | cat -s

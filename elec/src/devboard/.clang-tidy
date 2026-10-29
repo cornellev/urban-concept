@@ -1,0 +1,5 @@
+---
+InheritParentConfig: true
+# every index into the line and frame buffers is checked against the array size before use
+Checks: >
+  -cppcoreguidelines-pro-bounds-constant-array-index
