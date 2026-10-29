@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <span>
 #include <string_view>
+#include <system_error>
 #include <thread>
 #include <utility>
 
@@ -71,9 +72,8 @@ void usage(const char* prog) {
 // a whole decimal number that fits in T
 template <class T>
 bool parse(std::string_view s, T& out) {
-    const auto* end = s.data() + s.size();
-    const auto r    = std::from_chars(s.data(), end, out);
-    return r.ec == std::errc{} && r.ptr == end;
+    const auto r = std::from_chars(s.data(), s.data() + s.size(), out);
+    return r.ec == std::errc{} && r.ptr == s.data() + s.size();
 }
 
 void report(const char* what, const chuds::TxResult& st) {
@@ -109,7 +109,8 @@ int run_body(Bus& bus, int argc, char** argv, int first) {
     using chuds::BodyState;
     std::uint8_t bits{};
     for (int i = first; i < argc; ++i) {
-        const auto it = std::ranges::find(kOutputs, std::string_view{argv[i]}, &NamedValue::name);
+        const auto* const it =
+            std::ranges::find(kOutputs, std::string_view{argv[i]}, &NamedValue::name);
         if (it == kOutputs.end()) {
             std::fprintf(stderr, "unknown output: %s\n", argv[i]);
             return 2;
@@ -151,7 +152,7 @@ int run_body(Bus& bus, int argc, char** argv, int first) {
 int run_blink(Bus& bus, std::string_view node_name, std::string_view arg) {
     std::span<const NamedValue> nodes = kNodes;
     if (node_name != "all") {
-        const auto it = std::ranges::find(kNodes, node_name, &NamedValue::name);
+        const auto* const it = std::ranges::find(kNodes, node_name, &NamedValue::name);
         if (it == kNodes.end()) {
             std::fprintf(stderr,
                          "blink node must be front_aux, back_aux, joulemeter, devboard, or all\n");
