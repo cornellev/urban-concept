@@ -15,12 +15,13 @@ There is no homing or sensor correction, so missed steps or movement while the
 driver is disabled are not reflected in the estimate. On arrival, the driver stays
 enabled to hold position. A new target inside the stopping distance can be passed
 while braking before the controller returns to it; travel stays within the configured
-limits. Pulse timing is serviced by the main loop; loop/interrupt delays may reduce
-the effective speed below the configured maximum.
+limits. Pulses come from the PWM hardware, one PWM period per step, so their timing
+doesn't depend on the main loop. A PWM wrap interrupt counts each pulse as it ends and
+loads the period after the next (see `steering_pulses.hpp`).
 
 Keep sending drive commands while moving or holding. The existing 200 ms command
-timeout immediately cancels motion and disables the motors, preserving the step
-count. The next valid command resumes from that count. The drivetrain float still
+timeout cancels motion: at most two pulses already loaded into the PWM still go out,
+then the driver is disabled, preserving the step count. The next valid command resumes from that count. The drivetrain float still
 requests speed, and the serial frame layout is unchanged.
 
 Run the host motion tests from this directory:
@@ -28,4 +29,8 @@ Run the host motion tests from this directory:
 ```sh
 g++ -std=c++20 -Wall -Wextra -Werror tests/steering_motion_test.cpp -o /tmp/steering_motion_test
 /tmp/steering_motion_test
+g++ -std=c++20 -Wall -Wextra -Werror tests/steering_pulses_test.cpp -o /tmp/steering_pulses_test
+/tmp/steering_pulses_test
+g++ -std=c++20 -Wall -Wextra -Werror tests/cobs_test.cpp -o /tmp/cobs_test
+/tmp/cobs_test
 ```

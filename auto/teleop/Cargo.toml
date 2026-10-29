@@ -5,6 +5,5 @@ edition = "2024"
 
 [dependencies]
 cobs = "0.5.1"
-crc = "3.4.0"
-gilrs = "0.11.2"
+gilrs = { version = "0.11.2", default-features = false, features = ["xinput"] }
 serialport = "4.10.1"
