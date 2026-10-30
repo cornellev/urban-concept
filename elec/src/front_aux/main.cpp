@@ -5,10 +5,11 @@
 #include "chuds/chuds.hpp"
 #include "chuds/mcp_transport.hpp"
 #include "common/can_health.hpp"
+#include "common/can_rx.hpp"
 #include "common/interval.hpp"
 #include "common/rpm.hpp"
 #include "common/rx_log.hpp"
-#include "common/status_blink.hpp"
+#include "common/status_led.hpp"
 #include "config.hpp"
 #include "hardware/adc.h"
 #include "hardware/watchdog.h"
@@ -24,17 +25,13 @@ constexpr std::uint32_t kPublishPeriodMs   = 100;
 constexpr std::uint32_t kBlinkHalfPeriodMs = 500;
 // the leader must resend body state within this period or outputs fall back to their safe state
 constexpr std::uint32_t kCommandTimeoutMs = 1000;
-// frames handled per loop pass, the mcp rx fifo depth, so a flooded bus cannot starve the timers
-constexpr int kMaxRxPerPass = 8;
-
 // a loop pass takes microseconds, so this only trips on a real hang, well inside the 1 s timeout
 constexpr std::uint32_t kWatchdogMs = 500;
 
 namespace {
 
 void init_outputs() {
-    for (const unsigned pin :
-         {kStatusLed, kTurnLeft, kTurnRight, kHeadlightL, kHeadlightR, kHorn}) {
+    for (const unsigned pin : {kTurnLeft, kTurnRight, kHeadlightL, kHeadlightR, kHorn}) {
         gpio_init(pin);
         gpio_set_dir(pin, GPIO_OUT);
         gpio_put(pin, false);
@@ -81,8 +78,7 @@ int main() {
     // todo clear on a ratified resume command
     bool stopped{};
     cev::Interval pub{kPublishPeriodMs};
-    bool led_on{};
-    cev::Interval blink{kBlinkHalfPeriodMs};
+    cev::StatusLed status{kStatusLed, kBlinkHalfPeriodMs};
     cev::CanHealth can_health;
     cev::RxLog rx_log{kNodeId};
     absolute_time_t command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
@@ -93,7 +89,7 @@ int main() {
     while (true) {
         watchdog_update();
         can_health.check(bus);
-        for (int i = 0; i < kMaxRxPerPass; ++i) {
+        for (int i = 0; i < cev::kMaxRxPerPass; ++i) {
             const auto rx = bus.recv();
             if (!rx) {
                 break;
@@ -113,7 +109,7 @@ int main() {
                     command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
                 }
             }
-            cev::apply_status_blink(m, kNodeId, blink);
+            status.handle_message(m, kNodeId);
         }
 
         // headlights hold, here and on a stop, since going dark is worse than staying lit
@@ -125,10 +121,7 @@ int main() {
             command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
         }
 
-        if (blink.due()) {
-            led_on = !led_on;
-            gpio_put(kStatusLed, led_on);
-        }
+        status.service();
 
         if (pub.due()) {
             const cev::RpmCounts rpm = cev::rpm_take();
