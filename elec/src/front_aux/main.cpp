@@ -41,15 +41,15 @@ void init_outputs() {
     }
 }
 
-// drive this node's outputs from body state bits
-void apply(std::uint8_t bits) {
-    const bool lit        = (bits & chuds::BodyState::kBlinkPhase) != 0;
-    const bool headlights = (bits & chuds::BodyState::kHeadlights) != 0;
-    gpio_put(kTurnLeft, lit && (bits & chuds::BodyState::kLeftTurn) != 0);
-    gpio_put(kTurnRight, lit && (bits & chuds::BodyState::kRightTurn) != 0);
+// drive this node's outputs from the commanded body state
+void apply(const chuds::BodyState& s) {
+    const bool lit        = s.blink_phase();
+    const bool headlights = s.headlights();
+    gpio_put(kTurnLeft, lit && s.left_turn());
+    gpio_put(kTurnRight, lit && s.right_turn());
     gpio_put(kHeadlightL, headlights);
     gpio_put(kHeadlightR, headlights);
-    gpio_put(kHorn, (bits & chuds::BodyState::kHorn) != 0);
+    gpio_put(kHorn, s.horn());
 }
 
 }  // namespace
@@ -75,8 +75,8 @@ int main() {
         std::printf("can init failed\n");
     }
 
-    // body state bits currently applied
-    std::uint8_t body{};
+    // the commanded body outputs currently applied
+    chuds::BodyState body{};
     // a stop latches until reset
     // todo clear on a ratified resume command
     bool stopped{};
@@ -101,12 +101,14 @@ int main() {
             const chuds::Message& m = *rx;
             rx_log.log(m);
             if (m.cls == chuds::MsgClass::Emergency && m.type == chuds::MsgType::Stop) {
-                stopped = true;
-                body &= chuds::BodyState::kHeadlights;
+                stopped               = true;
+                const bool headlights = body.headlights();
+                body                  = chuds::BodyState{};
+                body.set_headlights(headlights);
                 apply(body);
             } else if (!stopped) {
                 if (const auto b = chuds::catalog_body<chuds::BodyState>(m)) {
-                    body = b->bits;
+                    body = *b;
                     apply(body);
                     command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
                 }
@@ -116,7 +118,9 @@ int main() {
 
         // headlights hold, here and on a stop, since going dark is worse than staying lit
         if (time_reached(command_deadline)) {
-            body &= chuds::BodyState::kHeadlights;
+            const bool headlights = body.headlights();
+            body                  = chuds::BodyState{};
+            body.set_headlights(headlights);
             apply(body);
             command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
         }

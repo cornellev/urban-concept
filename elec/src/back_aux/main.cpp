@@ -115,12 +115,12 @@ void init_outputs() {
     pwm_set_enabled(slice, true);
 }
 
-// drive this node's outputs from body state bits
-void apply(std::uint8_t bits, Wiper& w) {
-    const bool lit = (bits & chuds::BodyState::kBlinkPhase) != 0;
-    gpio_put(kTurnLeft, lit && (bits & chuds::BodyState::kLeftTurn) != 0);
-    gpio_put(kTurnRight, lit && (bits & chuds::BodyState::kRightTurn) != 0);
-    w.running = (bits & chuds::BodyState::kWiper) != 0;
+// drive this node's outputs from the body state
+void apply(const chuds::BodyState& s, Wiper& w) {
+    const bool lit = s.blink_phase();
+    gpio_put(kTurnLeft, lit && s.left_turn());
+    gpio_put(kTurnRight, lit && s.right_turn());
+    w.running = s.wiper();
     w.parking = !w.running;
 }
 
@@ -147,8 +147,8 @@ int main() {
         std::printf("can init failed\n");
     }
 
-    // body state bits currently applied
-    std::uint8_t body{};
+    // the commanded body outputs currently applied
+    chuds::BodyState body{};
     Wiper wiper{};
     // a stop latches until reset
     // todo clear on a ratified resume command
@@ -176,11 +176,11 @@ int main() {
             rx_log.log(m);
             if (m.cls == chuds::MsgClass::Emergency && m.type == chuds::MsgType::Stop) {
                 stopped = true;
-                body    = 0;
+                body    = chuds::BodyState{};
                 apply(body, wiper);
             } else if (!stopped) {
                 if (const auto b = chuds::catalog_body<chuds::BodyState>(m)) {
-                    body = b->bits;
+                    body = *b;
                     apply(body, wiper);
                     command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
                 }
@@ -189,7 +189,7 @@ int main() {
         }
 
         if (time_reached(command_deadline)) {
-            body = 0;
+            body = chuds::BodyState{};
             apply(body, wiper);
             command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
         }
