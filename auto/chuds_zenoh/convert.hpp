@@ -44,4 +44,22 @@ struct TelemetryPayloads {
     };
 }
 
+// one 6dof imu reading
+struct ImuSample {
+    double accel_x{};     // m/s^2
+    double accel_y{};     // m/s^2
+    double accel_z{};     // m/s^2
+    double roll_rate{};   // rad/s
+    double pitch_rate{};  // rad/s
+    double yaw_rate{};    // rad/s
+};
+
+[[nodiscard]] inline std::string imu_payload(const ImuSample& s) {
+    return nlohmann::json{
+        {"accel_x", s.accel_x},       {"accel_y", s.accel_y},       {"accel_z", s.accel_z},
+        {"roll_rate", s.roll_rate},   {"pitch_rate", s.pitch_rate}, {"yaw_rate", s.yaw_rate},
+    }
+        .dump();
+}
+
 }  // namespace chuds_zenoh

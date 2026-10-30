@@ -21,6 +21,7 @@ constexpr std::string_view kControlKey       = "cev/commands/control";
 constexpr std::string_view kLeftRpmKey       = "cev/sensors/wheels/left_rpm";
 constexpr std::string_view kRightRpmKey      = "cev/sensors/wheels/right_rpm";
 constexpr std::string_view kSteeringAngleKey = "cev/sensors/steering_angle";
+constexpr std::string_view kImuKey           = "cev/sensors/imu";
 
 // atomic, not sig_atomic_t, since the signal may land on a zenoh thread
 std::atomic<bool> g_stop{false};
