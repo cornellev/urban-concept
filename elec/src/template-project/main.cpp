@@ -41,6 +41,6 @@ int main() {
             // handle messages addressed to this node here
         }
 
-        status.service();
+        status.tick();
     }
 }

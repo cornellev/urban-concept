@@ -85,7 +85,7 @@ void forward_rx(chuds::Mcp251863Transport& can, cev::StatusLed& status) {
         }
         std::printf("\n");
         if (const auto m = chuds::decode(*rx)) {
-            status.handle_message(*m, chuds::devboard::kNodeId);
+            status.apply_status_blink(*m, chuds::devboard::kNodeId);
         }
     }
 }
@@ -145,6 +145,6 @@ int main() {
             std::printf("can init failed\n");
         }
 
-        status.service();
+        status.tick();
     }
 }

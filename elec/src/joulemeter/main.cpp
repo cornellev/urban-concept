@@ -83,7 +83,7 @@ int main() {
                 break;
             }
             rx_log.log(*rx);
-            status.handle_message(*rx, kNodeId);
+            status.apply_status_blink(*rx, kNodeId);
         }
 
         const float v_bus = raw_to_volts(read_raw(kVoltageAdc)) * kVoltageDividerRatio;
@@ -99,7 +99,7 @@ int main() {
         v_sum += static_cast<double>(v_bus) * dt;
         i_sum += static_cast<double>(amps) * dt;
 
-        status.service();
+        status.tick();
 
         if (report.due()) {
             const Telemetry t{static_cast<float>(v_sum / period_s),

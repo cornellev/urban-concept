@@ -39,7 +39,7 @@ void init_outputs() {
 }
 
 // drive this node's outputs from the commanded body state
-void apply(const chuds::BodyState& s) {
+void apply_body_state(const chuds::BodyState& s) {
     const bool lit        = s.blink_phase();
     const bool headlights = s.headlights();
     gpio_put(kTurnLeft, lit && s.left_turn());
@@ -101,15 +101,15 @@ int main() {
                 const bool headlights = body.headlights();
                 body                  = chuds::BodyState{};
                 body.set_headlights(headlights);
-                apply(body);
+                apply_body_state(body);
             } else if (!stopped) {
                 if (const auto b = chuds::catalog_body<chuds::BodyState>(m)) {
                     body = *b;
-                    apply(body);
+                    apply_body_state(body);
                     command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
                 }
             }
-            status.handle_message(m, kNodeId);
+            status.apply_status_blink(m, kNodeId);
         }
 
         // headlights hold, here and on a stop, since going dark is worse than staying lit
@@ -117,11 +117,11 @@ int main() {
             const bool headlights = body.headlights();
             body                  = chuds::BodyState{};
             body.set_headlights(headlights);
-            apply(body);
+            apply_body_state(body);
             command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
         }
 
-        status.service();
+        status.tick();
 
         if (pub.due()) {
             const cev::RpmCounts rpm = cev::rpm_take();

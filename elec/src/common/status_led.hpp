@@ -26,7 +26,7 @@ class StatusLed {
     }
 
     // toggle the pins once per blink period
-    void service() {
+    void tick() {
         if (!blink_.due()) {
             return;
         }
@@ -35,7 +35,7 @@ class StatusLed {
     }
 
     // adopt a StatusBlink period aimed at node, called on every received message
-    void handle_message(const chuds::Message& m, std::uint8_t node) {
+    void apply_status_blink(const chuds::Message& m, std::uint8_t node) {
         if (m.subaddress != node) {
             return;
         }

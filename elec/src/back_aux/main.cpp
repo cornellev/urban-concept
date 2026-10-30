@@ -114,7 +114,7 @@ void init_outputs() {
 }
 
 // drive this node's outputs from the body state
-void apply(const chuds::BodyState& s, Wiper& w) {
+void apply_body_state(const chuds::BodyState& s, Wiper& w) {
     const bool lit = s.blink_phase();
     gpio_put(kTurnLeft, lit && s.left_turn());
     gpio_put(kTurnRight, lit && s.right_turn());
@@ -174,20 +174,20 @@ int main() {
             if (m.cls == chuds::MsgClass::Emergency && m.type == chuds::MsgType::Stop) {
                 stopped = true;
                 body    = chuds::BodyState{};
-                apply(body, wiper);
+                apply_body_state(body, wiper);
             } else if (!stopped) {
                 if (const auto b = chuds::catalog_body<chuds::BodyState>(m)) {
                     body = *b;
-                    apply(body, wiper);
+                    apply_body_state(body, wiper);
                     command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
                 }
             }
-            status.handle_message(m, kNodeId);
+            status.apply_status_blink(m, kNodeId);
         }
 
         if (time_reached(command_deadline)) {
             body = chuds::BodyState{};
-            apply(body, wiper);
+            apply_body_state(body, wiper);
             command_deadline = make_timeout_time_ms(kCommandTimeoutMs);
         }
 
@@ -195,7 +195,7 @@ int main() {
             wiper_tick(wiper);
         }
 
-        status.service();
+        status.tick();
 
         if (pub.due()) {
             const cev::RpmCounts rpm = cev::rpm_take();
