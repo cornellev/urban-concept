@@ -1,5 +1,4 @@
-//! Drive the car from a gamepad: left stick x steers, right stick y drives (up is forward).
-//! The triggers aren't used: on our controller, LT wraps from 255 back to 0 when fully pressed.
+//! Drive the car from ackermann commands on `cev/commands/control`.
 //! Shows the wheel rpm the pico reports.
 //!
 //! usage: teleop [--dry-run] [serial port]
@@ -19,19 +18,6 @@ const SEND_PERIOD: Duration = Duration::from_millis(20); // 50 Hz, well inside t
 const REOPEN_PERIOD: Duration = Duration::from_secs(1);
 
 const MAX_FRAME_LEN: usize = 32; // longer runs without a 0x00 are garbage
-
-const STICK_DEADZONE: f32 = 0.1;
-const MAX_STEERING: f32 = 1.0;
-const MAX_DRIVETRAIN: f32 = 0.6; // keep it slow while testing
-
-// zero inside the deadzone, then rescaled so the output still reaches 1.0 at full stick
-fn deadzone(value: f32) -> f32 {
-    if value.abs() < STICK_DEADZONE {
-        0.0
-    } else {
-        (value - STICK_DEADZONE * value.signum()) / (1.0 - STICK_DEADZONE)
-    }
-}
 
 fn open_port(path: &str) -> Option<Box<dyn SerialPort>> {
     // the pico only reads usb input while dtr is set; linux sets it on open, windows doesn't
@@ -75,7 +61,6 @@ fn read_telemetry(
     }
     Ok(latest)
 }
-
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

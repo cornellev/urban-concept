@@ -1,0 +1,11 @@
+[package]
+name = "gamepad"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gilrs = { version = "0.11.2", default-features = false, features = ["xinput"] }
+zenoh = "1.0.0"
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"

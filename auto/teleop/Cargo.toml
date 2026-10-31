@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 cobs = "0.5.1"
-gilrs = { version = "0.11.2", default-features = false, features = ["xinput"] }
 serialport = "4.10.1"
 zenoh = "1.0.0"
 tokio = { version = "1.0", features = ["full"] }
