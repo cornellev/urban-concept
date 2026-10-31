@@ -56,8 +56,8 @@ struct ImuSample {
 
 [[nodiscard]] inline std::string imu_payload(const ImuSample& s) {
     return nlohmann::json{
-        {"accel_x", s.accel_x},       {"accel_y", s.accel_y},       {"accel_z", s.accel_z},
-        {"roll_rate", s.roll_rate},   {"pitch_rate", s.pitch_rate}, {"yaw_rate", s.yaw_rate},
+        {"accel_x", s.accel_x},     {"accel_y", s.accel_y},       {"accel_z", s.accel_z},
+        {"roll_rate", s.roll_rate}, {"pitch_rate", s.pitch_rate}, {"yaw_rate", s.yaw_rate},
     }
         .dump();
 }
