@@ -6,7 +6,6 @@
 #include "hardware/clocks.h"
 #include "hardware/pwm.h"
 #include "pico/stdlib.h"
-
 #include "steering_motion.hpp"
 
 // ---- pin map ----
@@ -32,12 +31,12 @@ constexpr SteeringMotor steering = {.pulse = 14, .dir = 15, .enable = 16};
 
 constexpr uint ONBOARD_LED_PIN = 25;
 
-constexpr float DRIVETRAIN_PWM_FREQ_HZ = 2'000.0f;
-constexpr float STEPPER_MAX_FREQ_HZ = 17'500.0f;
+constexpr float DRIVETRAIN_PWM_FREQ_HZ      = 2'000.0f;
+constexpr float STEPPER_MAX_FREQ_HZ         = 17'500.0f;
 constexpr int32_t STEERING_HALF_RANGE_STEPS = 2'000;  // +/-90 degrees at 8,000 pulses/rev
 constexpr float STEPPER_ACCELERATION = 40'000.0f;  // steps/s^2; applies to acceleration and braking
 constexpr uint STEPPER_PULSE_US = 3;  // DM542T: pulse high and low must each last at least 2.5 us
-constexpr uint STEPPER_DIR_SETUP_US = 5;     // DM542T: dir must lead the pulse edge by at least 5 us
+constexpr uint STEPPER_DIR_SETUP_US = 5;  // DM542T: dir must lead the pulse edge by at least 5 us
 constexpr uint STEPPER_ENABLE_SETUP_US = 5;  // DM542T: enable must lead dir by at least 5 us
 
 static_assert(STEERING_HALF_RANGE_STEPS > 0);
@@ -48,7 +47,8 @@ static_assert(STEPPER_MAX_FREQ_HZ * (2 * STEPPER_PULSE_US) < 1'000'000.0f);
 constexpr uint32_t DRIVETRAIN_WRAP = SYS_CLK_HZ / DRIVETRAIN_PWM_FREQ_HZ - 1;
 static_assert(DRIVETRAIN_WRAP <= UINT16_MAX, "drivetrain PWM frequency too low for clkdiv = 1");
 
-static SteeringMotion steering_motion(STEERING_HALF_RANGE_STEPS, STEPPER_MAX_FREQ_HZ, STEPPER_ACCELERATION);
+static SteeringMotion steering_motion(STEERING_HALF_RANGE_STEPS, STEPPER_MAX_FREQ_HZ,
+                                      STEPPER_ACCELERATION);
 static SteeringMotion::Step pending_step;
 static uint64_t next_step_us = 0;
 
@@ -97,8 +97,8 @@ static void update_steering() {
         sleep_us(STEPPER_DIR_SETUP_US);
     }
     const uint64_t now = time_us_64();
-    next_step_us = std::max(last_edge_us != 0 ? last_edge_us + pending_step.interval_us
-                                            : now + pending_step.interval_us,
+    next_step_us       = std::max(last_edge_us != 0 ? last_edge_us + pending_step.interval_us
+                                                    : now + pending_step.interval_us,
                             now + STEPPER_PULSE_US);
 }
 
@@ -125,13 +125,14 @@ static void init_motor(const DrivetrainMotor& motor) {
 
 // [-1.0, 1.0]; the sign picks fwd or back (always opposite), the magnitude maps linearly onto duty
 static void set_speed(const DrivetrainMotor& motor, float speed) {
-    speed = std::clamp(speed, -1.0f, 1.0f);
+    speed        = std::clamp(speed, -1.0f, 1.0f);
     bool reverse = speed < 0.0f;
 
     // cut power before swapping direction, and write both pins at once so they're never equal
     if (gpio_get_out_level(motor.back) != reverse) {
         pwm_set_gpio_level(motor.pwm, 0);
-        gpio_put_masked((1u << motor.fwd) | (1u << motor.back), reverse ? 1u << motor.back : 1u << motor.fwd);
+        gpio_put_masked((1u << motor.fwd) | (1u << motor.back),
+                        reverse ? 1u << motor.back : 1u << motor.fwd);
     }
 
     // level = wrap + 1 holds the output high the whole period
@@ -153,11 +154,12 @@ static void stop_all() {
 // steering: -1 = -half range, 0 = boot position (center), +1 = +half range
 //   pico -> jetson  MSG_TELEMETRY  0x02  f32 left rpm, f32 right rpm
 
-constexpr uint8_t MSG_DRIVE = 0x01;
-constexpr uint8_t MSG_TELEMETRY = 0x02;
+constexpr uint8_t MSG_DRIVE      = 0x01;
+constexpr uint8_t MSG_TELEMETRY  = 0x02;
 constexpr size_t DRIVE_FRAME_LEN = 1 + 2 * sizeof(float) + 2;
-constexpr size_t MAX_ENCODED_LEN = 32;     // longer frames are garbage and get dropped
-constexpr uint32_t COMMAND_TIMEOUT_MS = 200;  // stop every motor if no valid command arrives for this long
+constexpr size_t MAX_ENCODED_LEN = 32;  // longer frames are garbage and get dropped
+constexpr uint32_t COMMAND_TIMEOUT_MS =
+    200;  // stop every motor if no valid command arrives for this long
 
 static uint16_t crc16(const uint8_t* data, size_t len) {
     uint16_t crc = 0xFFFF;
@@ -172,7 +174,7 @@ static uint16_t crc16(const uint8_t* data, size_t len) {
 
 // out must hold len bytes. returns the decoded length, or 0 if the frame is malformed
 static size_t cobs_decode(const uint8_t* in, size_t len, uint8_t* out) {
-    size_t read = 0;
+    size_t read    = 0;
     size_t written = 0;
     while (read < len) {
         uint8_t code = in[read++];
@@ -193,7 +195,7 @@ static size_t cobs_decode(const uint8_t* in, size_t len, uint8_t* out) {
 static size_t cobs_encode(const uint8_t* in, size_t len, uint8_t* out) {
     size_t code_at = 0;
     size_t written = 1;
-    uint8_t code = 1;
+    uint8_t code   = 1;
     for (size_t i = 0; i < len; i++) {
         if (in[i] != 0) {
             out[written++] = in[i];
@@ -201,8 +203,8 @@ static size_t cobs_encode(const uint8_t* in, size_t len, uint8_t* out) {
         }
         if (in[i] == 0 || code == 0xFF) {
             out[code_at] = code;
-            code_at = written++;
-            code = 1;
+            code_at      = written++;
+            code         = 1;
         }
     }
     out[code_at] = code;
@@ -216,11 +218,11 @@ static size_t cobs_encode(const uint8_t* in, size_t len, uint8_t* out) {
     memcpy(&frame[1], &left_rpm, sizeof(float));
     memcpy(&frame[5], &right_rpm, sizeof(float));
     uint16_t crc = crc16(frame, 9);
-    frame[9] = crc & 0xFF;
-    frame[10] = crc >> 8;
+    frame[9]     = crc & 0xFF;
+    frame[10]    = crc >> 8;
 
     uint8_t encoded[sizeof(frame) + 2];
-    size_t len = cobs_encode(frame, sizeof(frame), encoded);
+    size_t len     = cobs_encode(frame, sizeof(frame), encoded);
     encoded[len++] = 0;
 
     // raw, since stdio would turn any 0x0A byte into 0x0D 0x0A
@@ -268,10 +270,10 @@ int main() {
     stop_all();
 
     uint8_t rx[MAX_ENCODED_LEN];
-    size_t rx_len = 0;
-    bool rx_overflow = false;
+    size_t rx_len                = 0;
+    bool rx_overflow             = false;
     absolute_time_t last_command = get_absolute_time();
-    bool timed_out = true;
+    bool timed_out               = true;
 
     while (true) {
         int c = getchar_timeout_us(0);
@@ -279,9 +281,9 @@ int main() {
             if (c == 0) {
                 if (!rx_overflow && handle_frame(rx, rx_len)) {
                     last_command = get_absolute_time();
-                    timed_out = false;
+                    timed_out    = false;
                 }
-                rx_len = 0;
+                rx_len      = 0;
                 rx_overflow = false;
             } else if (rx_len < MAX_ENCODED_LEN) {
                 rx[rx_len++] = c;
@@ -290,7 +292,8 @@ int main() {
             }
         }
 
-        if (!timed_out && absolute_time_diff_us(last_command, get_absolute_time()) > COMMAND_TIMEOUT_MS * 1000) {
+        if (!timed_out &&
+            absolute_time_diff_us(last_command, get_absolute_time()) > COMMAND_TIMEOUT_MS * 1000) {
             stop_all();
             timed_out = true;
         }

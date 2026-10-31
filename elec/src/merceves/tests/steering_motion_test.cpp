@@ -5,8 +5,8 @@
 #include <cstdio>
 #include <random>
 
-constexpr int RANGE = 2000;
-constexpr float MAX_SPEED = 17500.0f;
+constexpr int RANGE          = 2000;
+constexpr float MAX_SPEED    = 17500.0f;
 constexpr float ACCELERATION = 40000.0f;
 
 static int finish(SteeringMotion& motion, int expected) {
@@ -33,7 +33,7 @@ int main() {
     assert(finish(motion, 0) == 0);
     motion.set_target(1.0f);
     float previous_speed = 0.0f;
-    bool braking = false;
+    bool braking         = false;
     for (int i = 0; i < RANGE; ++i) {
         // Repeated commands must not restart the ramp.
         motion.set_target(1.0f);
@@ -45,7 +45,8 @@ int main() {
         if (braking) {
             assert(step.end_speed <= previous_speed);
         }
-        const float energy_change = step.end_speed * step.end_speed - previous_speed * previous_speed;
+        const float energy_change =
+            step.end_speed * step.end_speed - previous_speed * previous_speed;
         assert(std::fabs(energy_change) <= 2 * ACCELERATION + 32.0f);
         previous_speed = step.end_speed;
         motion.step_taken(step);
@@ -65,7 +66,7 @@ int main() {
         motion.step_taken(motion.next_step());
     }
     motion.set_target(-1.0f);
-    previous_speed = 1.0f;
+    previous_speed         = 1.0f;
     int previous_direction = 1;
     for (int i = 0; i < 5000; ++i) {
         const auto step = motion.next_step();
@@ -76,7 +77,7 @@ int main() {
             assert(previous_speed == 0.0f);
         }
         previous_direction = step.direction;
-        previous_speed = step.end_speed;
+        previous_speed     = step.end_speed;
         motion.step_taken(step);
     }
     assert(finish(motion, -RANGE) == 0);
@@ -94,7 +95,7 @@ int main() {
 
     // Targets changing inside the stopping distance, near limits, and at rest.
     std::mt19937 random(42);
-    previous_speed = 0.0f;
+    previous_speed     = 0.0f;
     previous_direction = 1;
     for (int trial = 0; trial < 1000; ++trial) {
         const int target = static_cast<int>(random() % (2 * RANGE + 1)) - RANGE;
@@ -109,7 +110,7 @@ int main() {
             }
             const float energy_change = step.end_speed_squared - previous_speed * previous_speed;
             assert(std::fabs(energy_change) <= 2 * ACCELERATION + 32.0f);
-            previous_speed = step.end_speed;
+            previous_speed     = step.end_speed;
             previous_direction = step.direction;
             motion.step_taken(step);
             assert(std::abs(motion.position()) <= RANGE);
