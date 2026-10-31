@@ -4,7 +4,6 @@
 
 #include <chrono>
 #include <csignal>
-#include <cstdint>
 #include <cstdio>
 #include <string_view>
 #include <utility>
