@@ -61,7 +61,7 @@ fn read_command(gilrs: &mut Gilrs) -> Command {
     }
 }
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main(flavor = "multi_thread", worker_threads = 1)]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut pads = Gilrs::new().expect("failed to start gamepad input");
     for (_, pad) in pads.gamepads() {
