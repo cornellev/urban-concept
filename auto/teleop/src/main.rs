@@ -6,12 +6,12 @@
 //! --dry-run prints the commands instead of sending them.
 
 mod protocol;
+mod config;
+mod ackermann;
 
 use std::io::Write;
-use std::thread;
 use std::time::{Duration, Instant};
 
-use gilrs::{Axis, EventType, Gilrs};
 use serialport::SerialPort;
 
 const DEFAULT_PORT: &str = "/dev/serial/by-id/usb-Raspberry_Pi_Pico_505374175A8A7018-if00";
@@ -76,8 +76,10 @@ fn read_telemetry(
     Ok(latest)
 }
 
-fn main() {
-    let mut dry_run = false;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut dry_run = config::DRY_RUN;
     let mut port_path = DEFAULT_PORT.to_string();
     for arg in std::env::args().skip(1) {
         if arg == "--dry-run" {
@@ -87,65 +89,72 @@ fn main() {
         }
     }
 
-    let mut gilrs = Gilrs::new().expect("failed to start gamepad input");
-    for (_, pad) in gilrs.gamepads() {
-        eprintln!("gamepad: {}", pad.name());
-    }
     let mut port: Option<Box<dyn SerialPort>> = None;
     let mut last_open_attempt: Option<Instant> = None;
     let mut rx = Vec::new();
 
+    let mut ackermann = ackermann::AckermannCommand::default();
+
+    let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    let ack_sub = session.declare_subscriber(config::ACKERMANN_KEY).await?;
+
     loop {
-        // drain events so gilrs's cached gamepad state is current
-        while let Some(event) = gilrs.next_event() {
-            match event.event {
-                EventType::Connected => {
-                    eprintln!("gamepad connected: {}", gilrs.gamepad(event.id).name())
-                }
-                EventType::Disconnected => eprintln!("gamepad disconnected, stopping"),
-                _ => {}
-            }
-        }
+        tokio::select! {
+            result = ack_sub.recv_async() => {
+                let Ok(sample) = result else {
+                    eprintln!("ackermann subscription closed");
+                    break;
+                };
 
-        // no gamepad means stop, but keep sending so the link stays up
-        let (steering, drivetrain) = match gilrs.gamepads().next() {
-            Some((_, pad)) => {
-                let steering = deadzone(pad.value(Axis::LeftStickX)) * MAX_STEERING;
-                let drivetrain = deadzone(pad.value(Axis::RightStickY)) * MAX_DRIVETRAIN;
-                (steering, drivetrain)
-            }
-            None => (0.0, 0.0),
-        };
+                let payload = sample.payload().to_bytes();
 
-        if dry_run {
-            println!("steering {steering:+.2}  drivetrain {drivetrain:+.2}");
-        } else {
-            if port.is_none() && last_open_attempt.is_none_or(|t| t.elapsed() >= REOPEN_PERIOD) {
-                last_open_attempt = Some(Instant::now());
-                port = open_port(&port_path);
-                rx.clear();
-            }
-            if let Some(p) = port.as_mut()
-                && let Err(e) = p.write_all(&protocol::encode_drive(steering, drivetrain))
-            {
-                eprintln!("write failed, reopening: {e}");
-                port = None;
-            }
-            if let Some(p) = port.as_mut() {
-                match read_telemetry(p.as_mut(), &mut rx) {
-                    // one line, rewritten in place
-                    Ok(Some((left, right))) => {
-                        eprint!("\rrpm  left {left:7.1}  right {right:7.1}  ")
+                match serde_json::from_slice::<ackermann::AckermannCommand>(&payload) {
+                    Ok(command) => {
+                        ackermann.update(command.steering_angle, command.speed);
                     }
-                    Ok(None) => {}
                     Err(e) => {
-                        eprintln!("\nread failed, reopening: {e}");
+                        eprintln!("failed to deserialize ackermann command: {e}");
+                    }
+                }
+            }
+
+            // a loop that just reads the ackermann command and sends it to the serial port at a fixed rate
+            _ = tokio::time::sleep(SEND_PERIOD) => {
+                if dry_run {
+                    println!("steering: {:.3}, drivetrain: {:.3}", ackermann.steering_angle, ackermann.speed);
+                    continue;
+                } else {
+                    if port.is_none() && last_open_attempt.is_none_or(|t| t.elapsed() >= REOPEN_PERIOD) {
+                        last_open_attempt = Some(Instant::now());
+                        port = open_port(&port_path);
+                        rx.clear();
+                    }
+
+                    let steering = ackermann.steering_angle as f32;
+                    let drivetrain = ackermann.speed as f32;
+
+                    if let Some(p) = port.as_mut()
+                        && let Err(e) = p.write_all(&protocol::encode_drive(steering, drivetrain))
+                    {
+                        eprintln!("write failed, reopening: {e}");
                         port = None;
                     }
+                    if let Some(p) = port.as_mut() {
+                        match read_telemetry(p.as_mut(), &mut rx) {
+                            // one line, rewritten in place
+                            Ok(Some((left, right))) => {
+                                eprint!("\rrpm  left {left:7.1}  right {right:7.1}  ")
+                            }
+                            Ok(None) => {}
+                            Err(e) => {
+                                eprintln!("\nread failed, reopening: {e}");
+                                port = None;
+                            }
+                        }
+                    }
                 }
             }
         }
-
-        thread::sleep(SEND_PERIOD);
     }
+    Ok(())
 }
