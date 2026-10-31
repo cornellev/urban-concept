@@ -23,6 +23,6 @@ test:
     just cev-lib chuds test
 
 # lint every module
-lint:
-    just elec lint
-    just cev-lib chuds lint
+lint *args:
+    just elec lint {{ args }}
+    just cev-lib chuds lint {{ args }}
