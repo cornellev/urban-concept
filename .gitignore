@@ -71,3 +71,8 @@ result-*
 
 # arm-gcc and picotool downloaded by elec/cmake/pinned_tools.cmake
 .tools/
+
+# Rust build output
+target/
+auto/imu-gps-node/target/
+
