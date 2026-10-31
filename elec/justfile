@@ -39,7 +39,7 @@ doctor:
 # nix's clang-tidy wrapper adds host headers, so use the unwrapped binary when there is one
 # lint every file the firmware build compiles, except vendored and generated code
 [unix]
-lint: configure
+lint: build
     #!/usr/bin/env bash
     set -euo pipefail
     tidy=$(command -v clang-tidy-unwrapped || command -v clang-tidy)
