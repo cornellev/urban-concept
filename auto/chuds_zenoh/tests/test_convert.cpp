@@ -35,3 +35,5 @@ TEST_CASE("telemetry_payloads splits one telemetry body into three topics") {
     CHECK(out.right_rpm == R"({"rpm":3.75})");
     CHECK(out.steering_angle == R"({"steering_angle":-12.0})");
 }
+
+// TODO: test the imu zenoh conversion once a source fills ImuSample (units, scaling, axis signs)
