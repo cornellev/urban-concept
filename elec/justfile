@@ -39,11 +39,11 @@ doctor:
 # nix's clang-tidy wrapper adds host headers, so use the unwrapped binary when there is one
 # lint every file the firmware build compiles, except vendored and generated code
 [unix]
-lint: configure
+lint *args: configure
     #!/usr/bin/env bash
     set -euo pipefail
     tidy=$(command -v clang-tidy-unwrapped || command -v clang-tidy)
     includes=$(arm-none-eabi-g++ -xc++ -E -v /dev/null 2>&1 | sed -n '/search starts here/,/End of search/s|^ |-extra-arg=-isystem|p')
     # run-clang-tidy prints each file's full command and a "N warnings generated" tally; drop both
-    run-clang-tidy -p build -quiet -clang-tidy-binary "$tidy" $includes '^((?!/(vendor|build)/).)*$' 2>&1 \
+    run-clang-tidy -p build -quiet -clang-tidy-binary "$tidy" $includes {{ args }} '^((?!/(vendor|build)/).)*$' 2>&1 \
         | { grep -vE '^\[[0-9]+/[0-9]+\]\[|[0-9]+ warnings generated\.$' || true; } | cat -s

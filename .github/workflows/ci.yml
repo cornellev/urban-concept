@@ -79,10 +79,8 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@v23
 
       # the matcher turns each warning line into an annotation on the PR
-      # any warning fails the check, as does a file that fails to parse
+      # warnings are errors only here, so local lint and editors stay advisory
       - name: lint
         run: |
-          set -o pipefail
           echo "::add-matcher::.github/clang-tidy.json"
-          nix develop --command just lint | tee lint.log
-          ! grep -qE ':[0-9]+:[0-9]+: warning: ' lint.log
+          nix develop --command just lint -warnings-as-errors='*'
